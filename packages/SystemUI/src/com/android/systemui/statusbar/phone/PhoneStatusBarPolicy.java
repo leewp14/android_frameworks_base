@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2012-2013 The Linux Foundation. All rights reserved.
+﻿/*
+ * Copyright (c) 2014, The Linux Foundation. All rights reserved.
  * Not a Contribution.
  * Copyright (C) 2008 The Android Open Source Project
  *
@@ -103,6 +105,9 @@ public class PhoneStatusBarPolicy {
             else if (action.equals(TtyIntent.TTY_ENABLED_CHANGE_ACTION)) {
                 updateTTY(intent);
             }
+            else if (action.equals(Intent.ACTION_HEADSET_PLUG)) {
+                updateHeadset(intent);
+            }
         }
     };
 
@@ -119,6 +124,7 @@ public class PhoneStatusBarPolicy {
         filter.addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
         filter.addAction(TtyIntent.TTY_ENABLED_CHANGE_ACTION);
+        filter.addAction(Intent.ACTION_HEADSET_PLUG);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
 
         int numPhones = MSimTelephonyManager.getDefault().getPhoneCount();
@@ -274,6 +280,28 @@ public class PhoneStatusBarPolicy {
             // TTY is off
             if (false) Log.v(TAG, "updateTTY: set TTY off");
             mService.setIconVisibility("tty", false);
+        }
+    }
+	
+    private final void updateHeadset(Intent intent) {
+        final String action = intent.getAction();
+        final int state = intent.getIntExtra("state", 4);
+        final int mic = intent.getIntExtra("microphone", 4);
+
+        switch (state) {
+            case 0:
+                try {
+                    mService.setIconVisibility("headset", false);
+                } catch (Exception e) {
+                }
+			    break;
+            case 1:
+                if (mic == 1)
+                    mService.setIcon("headset", R.drawable.stat_sys_headset_with_mic, 0, null);
+                else
+                    mService.setIcon("headset", R.drawable.stat_sys_headset_without_mic, 0, null);
+                mService.setIconVisibility("headset", true);
+			    break;
         }
     }
 }
