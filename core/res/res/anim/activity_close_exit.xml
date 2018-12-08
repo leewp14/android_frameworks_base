@@ -17,16 +17,7 @@
 */
 -->
 
-<set xmlns:android="http://schemas.android.com/apk/res/android"
-        android:shareInterpolator="false" android:zAdjustment="top">
-    <alpha android:fromAlpha="1.0" android:toAlpha="0.0"
-            android:interpolator="@interpolator/decelerate_cubic"
-            android:fillEnabled="true" android:fillBefore="true" android:fillAfter="true"
-            android:duration="300"/>
-    <scale android:fromXScale="1.0" android:toXScale=".8"
-            android:fromYScale="1.0" android:toYScale=".8"
-            android:pivotX="50%p" android:pivotY="50%p"
-            android:interpolator="@interpolator/decelerate_cubic"
-            android:fillEnabled="true" android:fillBefore="true" android:fillAfter="true"
-            android:duration="300"/>
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <alpha android:interpolator="@android:interpolator/linear" android:duration="150" android:fromAlpha="1.0" android:toAlpha="0.0" />
+    <scale android:interpolator="@android:interpolator/decelerate_quad" android:duration="150" android:pivotX="50.0%" android:pivotY="10.000002%" android:fromXScale="1.0" android:toXScale="0.93" android:fromYScale="1.0" android:toYScale="0.93" />
 </set>
