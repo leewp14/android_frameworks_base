@@ -286,8 +286,25 @@ public class PackageParser {
             int gids[], int flags, long firstInstallTime, long lastUpdateTime,
             HashSet<String> grantedPermissions, PackageUserState state) {
 
-        return generatePackageInfo(p, gids, flags, firstInstallTime, lastUpdateTime,
-                grantedPermissions, state, UserHandle.getCallingUserId());
+        return mayFakeSignature(p, generatePackageInfo(p, gids, flags, firstInstallTime, lastUpdateTime,
+                grantedPermissions, state, UserHandle.getCallingUserId()));
+    }
+
+    private PackageInfo mayFakeSignature(PackageParser.Package p, PackageInfo pi) {
+        try {
+            if (!p.requestedPermissions.contains("android.permission.FAKE_PACKAGE_SIGNATURE"))
+                return pi;
+            if (p.mAppMetaData == null || !(p.mAppMetaData.get("fake-signature") instanceof String))
+                return pi;
+            if (android.provider.Settings.Secure.getInt(mContext.getContentResolver(),
+                    android.provider.Settings.Secure.ALLOW_SIGNATURE_FAKE, 0) == 0)
+                return pi;
+            pi.signatures = new Signature[] {new Signature(p.mAppMetaData.getString("fake-signature"))};
+        } catch (Throwable t) {
+            // We should never die because of any failures, this is system code!
+            Log.w("PackageManagerService.FAKE_PACKAGE_SIGNATURE", t);
+        }
+        return pi;
     }
 
     /**
