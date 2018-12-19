@@ -4742,6 +4742,15 @@ public final class Settings {
         public static final String INSTALL_NON_MARKET_APPS = Global.INSTALL_NON_MARKET_APPS;
 
         /**
+         * Whether applications can fake a signature.
+         *
+         * <p>1 = permit apps to fake signature
+         * <p>0 = disable this feature
+         * @hide
+         */
+        public static final String ALLOW_SIGNATURE_FAKE = "allow_signature_fake";
+
+        /**
          * Comma-separated list of location providers that activities may access.
          *
          * @deprecated use {@link #LOCATION_MODE}
@@ -6470,15 +6479,6 @@ public final class Settings {
         * 0 = only allow installing from Google Play
         */
        public static final String INSTALL_NON_MARKET_APPS = "install_non_market_apps";
-
-       /**
-        * Whether applications can fake a signature.
-        *
-        * <p>1 = permit apps to fake signature
-        * <p>0 = disable this feature
-        * @hide
-        */
-       public static final String ALLOW_SIGNATURE_FAKE = "allow_signature_fake";
 
        /**
         * Whether mobile data connections are allowed by the user.  See
