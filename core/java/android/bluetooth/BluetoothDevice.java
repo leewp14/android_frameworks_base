@@ -727,11 +727,7 @@ public final class BluetoothDevice implements Parcelable {
             return null;
         }
         try {
-            String name = sService.getRemoteName(this);
-            if (name != null) {
-                return name.replaceAll("[\\t\\n\\r]+", " ");
-            }
-            return null;
+            return sService.getRemoteName(this);
         } catch (RemoteException e) {Log.e(TAG, "", e);}
         return null;
     }

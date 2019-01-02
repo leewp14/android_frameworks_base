@@ -60,6 +60,7 @@ import com.android.internal.os.SamplingProfilerIntegration;
 import com.android.internal.os.ZygoteInit;
 import com.android.internal.policy.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
+import com.android.server.ThemeService;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.audio.AudioService;
@@ -85,8 +86,11 @@ import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
 import com.android.server.notification.NotificationManagerService;
+import com.android.server.om.OverlayManagerService;
 import com.android.server.os.RegionalizationService;
 import com.android.server.os.SchedulingPolicyService;
+import com.android.server.pocket.PocketService;
+import com.android.server.pocket.PocketBridgeService;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
@@ -202,7 +206,7 @@ public final class SystemServer {
      * visual content.
      */
     private static final int DEFAULT_SYSTEM_THEME =
-            com.android.internal.R.style.Theme_DeviceDefault_System;
+            com.android.internal.R.style.Theme_Material_DayNight_DarkActionBar;
 
     private final int mFactoryTestMode;
     private Timer mProfilerSnapshotTimer;
@@ -537,6 +541,9 @@ public final class SystemServer {
         // Set up the Application instance for the system process and get started.
         mActivityManagerService.setSystemProcess();
 
+        // Manages Overlay packages
+        mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
+
         // The sensor service needs access to package manager service, app ops
         // service, and permissions service, therefore we start it after them.
         startSensorService();
@@ -583,6 +590,7 @@ public final class SystemServer {
         HardwarePropertiesManagerService hardwarePropertiesService = null;
         Object wigigP2pService = null;
         Object wigigService = null;
+        ThemeService themeService = null;
 
         boolean disableStorage = SystemProperties.getBoolean("config.disable_storage", false);
         boolean disableBluetooth = SystemProperties.getBoolean("config.disable_bluetooth", false);
@@ -652,6 +660,11 @@ public final class SystemServer {
 
             traceBeginAndSlog("InstallSystemProviders");
             mActivityManagerService.installSystemProviders();
+            Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+
+            traceBeginAndSlog("ThemeService");
+            themeService = new ThemeService(context);
+            ServiceManager.addService(Context.THEME_SERVICE, themeService);
             Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
 
             traceBeginAndSlog("StartVibratorService");
@@ -1270,6 +1283,14 @@ public final class SystemServer {
             mSystemServiceManager.startService(ShortcutService.Lifecycle.class);
 
             mSystemServiceManager.startService(LauncherAppsService.class);
+
+            Slog.i(TAG, "Starting PocketService");
+            mSystemServiceManager.startService(PocketService.class);
+            if (!context.getResources().getString(
+                    com.android.internal.R.string.config_pocketBridgeSysfsInpocket).isEmpty()) {
+                Slog.i(TAG, "Starting PocketBridgeService");
+                mSystemServiceManager.startService(PocketBridgeService.class);
+            }
         }
 
         if (!disableNonCoreServices && !disableMediaProjection) {
@@ -1390,6 +1411,12 @@ public final class SystemServer {
 
         if (safeMode) {
             mActivityManagerService.showSafeModeOverlay();
+        }
+
+        // Let's check whether we should disable all theme overlays
+        final boolean disableOverlays = wm.detectDisableOverlays();
+        if (disableOverlays) {
+            mActivityManagerService.disableOverlays();
         }
 
         // Update the configuration for this context by hand, because we're going

@@ -719,10 +719,6 @@ public abstract class Uri implements Parcelable, Comparable<Uri> {
                 LOOP: while (end < length) {
                     switch (uriString.charAt(end)) {
                         case '/': // Start of path
-                        case '\\':// Start of path
-                          // Per http://url.spec.whatwg.org/#host-state, the \ character
-                          // is treated as if it were a / character when encountered in a
-                          // host
                         case '?': // Start of query
                         case '#': // Start of fragment
                             break LOOP;
@@ -761,10 +757,6 @@ public abstract class Uri implements Parcelable, Comparable<Uri> {
                         case '#': // Start of fragment
                             return ""; // Empty path.
                         case '/': // Start of path!
-                        case '\\':// Start of path!
-                          // Per http://url.spec.whatwg.org/#host-state, the \ character
-                          // is treated as if it were a / character when encountered in a
-                          // host
                             break LOOP;
                     }
                     pathStart++;
@@ -1073,7 +1065,7 @@ public abstract class Uri implements Parcelable, Comparable<Uri> {
                 return null;
             }
 
-            int end = authority.lastIndexOf('@');
+            int end = authority.indexOf('@');
             return end == NOT_FOUND ? null : authority.substring(0, end);
         }
 
@@ -1097,7 +1089,7 @@ public abstract class Uri implements Parcelable, Comparable<Uri> {
             }
 
             // Parse out user info and then port.
-            int userInfoSeparator = authority.lastIndexOf('@');
+            int userInfoSeparator = authority.indexOf('@');
             int portSeparator = authority.indexOf(':', userInfoSeparator);
 
             String encodedHost = portSeparator == NOT_FOUND
@@ -1123,7 +1115,7 @@ public abstract class Uri implements Parcelable, Comparable<Uri> {
 
             // Make sure we look for the port separtor *after* the user info
             // separator. We have URLs with a ':' in the user info.
-            int userInfoSeparator = authority.lastIndexOf('@');
+            int userInfoSeparator = authority.indexOf('@');
             int portSeparator = authority.indexOf(':', userInfoSeparator);
 
             if (portSeparator == NOT_FOUND) {
@@ -2350,7 +2342,8 @@ public abstract class Uri implements Parcelable, Comparable<Uri> {
      * @hide
      */
     public void checkFileUriExposed(String location) {
-        if ("file".equals(getScheme()) && !getPath().startsWith("/system/")) {
+        if ("file".equals(getScheme()) && !(getPath().startsWith("/system/")
+                || getPath().startsWith("/data/system/theme/"))) {
             StrictMode.onFileUriExposed(this, location);
         }
     }

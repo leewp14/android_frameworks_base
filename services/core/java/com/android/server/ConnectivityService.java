@@ -380,6 +380,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private static final int EVENT_SET_ACCEPT_UNVALIDATED = 28;
 
     /**
+     * used to specify whether a network should not be penalized when it becomes unvalidated.
+     */
+    private static final int EVENT_SET_AVOID_UNVALIDATED = 35;
+
+    /**
      * used to ask the user to confirm a connection to an unvalidated network.
      * obj  = network
      */
@@ -405,16 +410,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     private static final int EVENT_REQUEST_LINKPROPERTIES  = 32;
     private static final int EVENT_REQUEST_NETCAPABILITIES = 33;
-
-    /**
-     * used to specify whether a network should not be penalized when it becomes unvalidated.
-     */
-    private static final int EVENT_SET_AVOID_UNVALIDATED = 35;
-
-    /**
-     * used to trigger revalidation of a network.
-     */
-    private static final int EVENT_REVALIDATE_NETWORK = 36;
 
     /** Handler thread used for both of the handlers below. */
     @VisibleForTesting
@@ -1351,16 +1346,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     public LinkProperties getLinkProperties(Network network) {
         enforceAccessPermission();
-        return getLinkProperties(getNetworkAgentInfoForNetwork(network));
-    }
-
-    private LinkProperties getLinkProperties(NetworkAgentInfo nai) {
-        if (nai == null) {
-            return null;
+        NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(network);
+        if (nai != null) {
+            synchronized (nai) {
+                return new LinkProperties(nai.linkProperties);
+            }
         }
-        synchronized (nai) {
-            return new LinkProperties(nai.linkProperties);
-        }
+        return null;
     }
 
     private NetworkCapabilities getNetworkCapabilitiesInternal(NetworkAgentInfo nai) {
@@ -3051,11 +3043,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     }
                     break;
                 }
-                case EVENT_REVALIDATE_NETWORK: {
-                    boolean hasConnectivity = (msg.arg2 == 1);
-                    handleReportNetworkConnectivity((Network) msg.obj, msg.arg1, hasConnectivity);
-                    break;
-                }
             }
         }
     }
@@ -3236,15 +3223,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     public void reportNetworkConnectivity(Network network, boolean hasConnectivity) {
         enforceAccessPermission();
         enforceInternetPermission();
-        final int uid = Binder.getCallingUid();
-        final int connectivityInfo = hasConnectivity ? 1 : 0;
-        mHandler.sendMessage(
-                mHandler.obtainMessage(EVENT_REVALIDATE_NETWORK, uid, connectivityInfo, network));
-    }
 
-    private void handleReportNetworkConnectivity(
-            Network network, int uid, boolean hasConnectivity) {
-        final NetworkAgentInfo nai;
+        NetworkAgentInfo nai;
         if (network == null) {
             nai = getDefaultNetwork();
         } else {
@@ -3255,23 +3235,23 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return;
         }
         // Revalidate if the app report does not match our current validated state.
-        if (hasConnectivity == nai.lastValidated) {
-            return;
-        }
+        if (hasConnectivity == nai.lastValidated) return;
+        final int uid = Binder.getCallingUid();
         if (DBG) {
-            int netid = nai.network.netId;
-            log("reportNetworkConnectivity(" + netid + ", " + hasConnectivity + ") by " + uid);
+            log("reportNetworkConnectivity(" + nai.network.netId + ", " + hasConnectivity +
+                    ") by " + uid);
         }
-        // Validating a network that has not yet connected could result in a call to
-        // rematchNetworkAndRequests() which is not meant to work on such networks.
-        if (!nai.everConnected) {
-            return;
+        synchronized (mVpns) {
+            synchronized (nai) {
+                // Validating a network that has not yet connected could result in a call to
+                // rematchNetworkAndRequests() which is not meant to work on such networks.
+                if (!nai.everConnected) return;
+
+                if (isNetworkWithLinkPropertiesBlocked(nai.linkProperties, uid, false)) return;
+
+                nai.networkMonitor.sendMessage(NetworkMonitor.CMD_FORCE_REEVALUATION, uid);
+            }
         }
-        LinkProperties lp = getLinkProperties(nai);
-        if (isNetworkWithLinkPropertiesBlocked(lp, uid, false)) {
-            return;
-        }
-        nai.networkMonitor.sendMessage(NetworkMonitor.CMD_FORCE_REEVALUATION, uid);
     }
 
     private ProxyInfo getDefaultProxy() {

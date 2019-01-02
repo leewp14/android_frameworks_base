@@ -493,18 +493,15 @@ public abstract class QSTile<TState extends State> {
 
     public static class DrawableIconWithRes extends DrawableIcon {
         private final int mId;
-        private final int mColor;
 
-        public DrawableIconWithRes(Drawable drawable, int id, int color) {
+        public DrawableIconWithRes(Drawable drawable, int id) {
             super(drawable);
             mId = id;
-            mColor = color;
         }
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof DrawableIconWithRes && ((DrawableIconWithRes) o).mId == mId &&
-                    ((DrawableIconWithRes) o).mColor == mColor;
+            return o instanceof DrawableIconWithRes && ((DrawableIconWithRes) o).mId == mId;
         }
     }
 

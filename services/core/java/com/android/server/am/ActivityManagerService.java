@@ -29,6 +29,7 @@ import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ProcessMap;
 import com.android.internal.app.SystemUserHomeActivity;
 import com.android.internal.app.procstats.ProcessStats;
+import com.android.internal.app.ActivityTrigger;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.IResultReceiver;
@@ -125,6 +126,8 @@ import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
+import android.content.om.IOverlayManager;
+import android.content.om.OverlayInfo;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
@@ -150,6 +153,8 @@ import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Proxy;
 import android.net.ProxyInfo;
 import android.net.Uri;
@@ -215,6 +220,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.Xml;
+import android.util.BoostFramework;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -513,6 +519,8 @@ public final class ActivityManagerService extends ActivityManagerNative
     // as one line, but close enough for now.
     static final int RESERVED_BYTES_PER_LOGCAT_LINE = 100;
 
+    static final String PROP_REFRESH_THEME = "sys.refresh_theme";
+
     // Access modes for handleIncomingUser.
     static final int ALLOW_NON_FULL = 0;
     static final int ALLOW_NON_FULL_IN_PROFILE = 1;
@@ -551,6 +559,22 @@ public final class ActivityManagerService extends ActivityManagerNative
     private static native int nativeMigrateFromBoost();
     private boolean mIsBoosted = false;
     private long mBoostStartTime = 0;
+
+    /* Freq Aggr boost objects */
+    public static BoostFramework sFreqAggr_init = null;
+    public static BoostFramework sFreqAggr = null;
+    public static boolean sIsFreqAggrBoostSet = false;
+    private boolean mIsFreqAggrEnabled = false;
+    private int lFreqAggr_TimeOut = 0;
+    private int lFreqAggr_Init_ParamVal[];
+    private int lFreqAggr_ParamVal[];
+
+    /* Launch boost v2 objects */
+    public static BoostFramework sPerfBoost_v2 = null;
+    public static boolean sIsLaunchBoostv2_set = false;
+    private boolean mIsLaunchBoostv2_enabled = false;
+    private int lBoost_v2_TimeOut = 0;
+    private int lBoost_v2_ParamVal[];
 
     /** All system services */
     SystemServiceManager mSystemServiceManager;
@@ -1572,6 +1596,7 @@ public final class ActivityManagerService extends ActivityManagerNative
 
     static ServiceThread sKillThread = null;
     static KillHandler sKillHandler = null;
+    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
     CompatModeDialog mCompatModeDialog;
     UnsupportedDisplaySizeDialog mUnsupportedDisplaySizeDialog;
@@ -1586,6 +1611,9 @@ public final class ActivityManagerService extends ActivityManagerNative
     // Enable B-service aging propagation on memory pressure.
     boolean mEnableBServicePropagation =
             SystemProperties.getBoolean("ro.sys.fw.bservice_enable", false);
+
+    static final boolean mEnableNetOpts =
+            SystemProperties.getBoolean("persist.netopts.enable",false);
 
     /**
      * Flag whether the current user is a "monkey", i.e. whether
@@ -1667,10 +1695,16 @@ public final class ActivityManagerService extends ActivityManagerNative
                     }
                     AppErrorResult res = (AppErrorResult) data.get("result");
                     if (mShowDialogs && !mSleeping && !mShuttingDown) {
-                        Dialog d = new StrictModeViolationDialog(mContext,
-                                ActivityManagerService.this, res, proc);
-                        d.show();
-                        proc.crashDialog = d;
+                        if (Settings.System.getInt(mContext.getContentResolver(),
+                                Settings.System.DISABLE_FC_NOTIFICATIONS, 0) != 1) {
+                            Dialog d = new StrictModeViolationDialog(mContext,
+                                    ActivityManagerService.this, res, proc);
+                            d.show();
+                            proc.crashDialog = d;
+                        } else {
+                            Slog.w(TAG, "Skipping crash dialog of " + proc + ": disabled");
+                            res.set(0);
+                        }
                     } else {
                         // The device is asleep, so just pretend that the user
                         // saw a crash dialog and hit "force quit".
@@ -2907,6 +2941,28 @@ public final class ActivityManagerService extends ActivityManagerNative
 
         Watchdog.getInstance().addMonitor(this);
         Watchdog.getInstance().addThread(mHandler);
+
+        mIsFreqAggrEnabled = mContext.getResources().getBoolean(
+                   com.android.internal.R.bool.config_enableFreqAggr);
+
+        if(mIsFreqAggrEnabled) {
+           lFreqAggr_TimeOut = mContext.getResources().getInteger(
+                   com.android.internal.R.integer.freqaggr_timeout_param);
+           lFreqAggr_Init_ParamVal = mContext.getResources().getIntArray(
+                   com.android.internal.R.array.freqaggr_init_param_value);
+           lFreqAggr_ParamVal = mContext.getResources().getIntArray(
+                   com.android.internal.R.array.freqaggr_param_value);
+        }
+
+        mIsLaunchBoostv2_enabled = mContext.getResources().getBoolean(
+                   com.android.internal.R.bool.config_enableLaunchBoostv2);
+
+        if(mIsLaunchBoostv2_enabled) {
+           lBoost_v2_TimeOut = mContext.getResources().getInteger(
+                   com.android.internal.R.integer.lboostv2_timeout_param);
+           lBoost_v2_ParamVal = mContext.getResources().getIntArray(
+                   com.android.internal.R.array.lboostv2_param_value);
+        }
     }
 
     public void setSystemServiceManager(SystemServiceManager mgr) {
@@ -3138,6 +3194,25 @@ public final class ActivityManagerService extends ActivityManagerNative
         return mAppBindArgs;
     }
 
+    private final void networkOptsCheck(int flag, String packageName) {
+        ConnectivityManager connectivityManager =
+            (ConnectivityManager)mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (connectivityManager != null) {
+            NetworkInfo netInfo = connectivityManager.getActiveNetworkInfo();
+            if (netInfo != null) {
+                /* netType: 0 for Mobile, 1 for WIFI*/
+                int netType = netInfo.getType();
+                if (mActivityTrigger != null) {
+                    mActivityTrigger.networkOptsCheck(flag, netType, packageName);
+                }
+            } else {
+                if (mActivityTrigger != null) {
+                    mActivityTrigger.networkOptsCheck(flag, ConnectivityManager.TYPE_NONE, packageName);
+                }
+            }
+        }
+    }
+
     boolean setFocusedActivityLocked(ActivityRecord r, String reason) {
         if (r == null || mFocusedActivity == r) {
             return false;
@@ -3157,6 +3232,10 @@ public final class ActivityManagerService extends ActivityManagerNative
 
         final ActivityRecord last = mFocusedActivity;
         mFocusedActivity = r;
+        if (mEnableNetOpts) {
+                networkOptsCheck(0, r.processName);
+        }
+
         if (r.task.isApplicationTask()) {
             if (mCurAppTimeTracker != r.appTimeTracker) {
                 // We are switching app tracking.  Complete the current one.
@@ -3950,6 +4029,13 @@ public final class ActivityManagerService extends ActivityManagerNative
                 mNativeDebuggingApp = null;
             }
 
+            //Check if zygote should refresh its fonts
+            boolean refreshTheme = false;
+            if (SystemProperties.getBoolean(PROP_REFRESH_THEME, false)) {
+                SystemProperties.set(PROP_REFRESH_THEME, "false");
+                refreshTheme = true;
+            }
+
             String requiredAbi = (abiOverride != null) ? abiOverride : app.info.primaryCpuAbi;
             if (requiredAbi == null) {
                 requiredAbi = Build.SUPPORTED_ABIS[0];
@@ -3974,7 +4060,7 @@ public final class ActivityManagerService extends ActivityManagerNative
             Process.ProcessStartResult startResult = Process.start(entryPoint,
                     app.processName, uid, uid, gids, debugFlags, mountExternal,
                     app.info.targetSdkVersion, app.info.seinfo, requiredAbi, instructionSet,
-                    app.info.dataDir, entryPointArgs);
+                    app.info.dataDir, refreshTheme, entryPointArgs);
             checkTime(startTime, "startProcess: returned from zygote!");
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
 
@@ -4018,6 +4104,45 @@ public final class ActivityManagerService extends ActivityManagerNative
                 buf.append(hostingNameStr);
             }
             Slog.i(TAG, buf.toString());
+
+            if(hostingType.equals("activity")) {
+                BoostFramework perf = new BoostFramework();
+
+                if (perf != null) {
+                    perf.perfIOPrefetchStart(startResult.pid,app.processName);
+                }
+
+                // Start Freq Aggregation boost
+                if (mIsFreqAggrEnabled == true && sFreqAggr_init == null
+                    && sFreqAggr == null) {
+                   sFreqAggr_init = new BoostFramework();
+                   sFreqAggr = new BoostFramework();
+                }
+                if (sFreqAggr_init != null && sFreqAggr != null) {
+                   sFreqAggr_init.perfLockAcquire(lFreqAggr_TimeOut, lFreqAggr_Init_ParamVal);
+                   sIsFreqAggrBoostSet = true;
+                   // Frequency Aggr perflock can only be passed one opcode-pair
+                   if (lFreqAggr_ParamVal.length == 2) {
+                       lFreqAggr_ParamVal[1] = startResult.pid;
+                       sFreqAggr.perfLockAcquire(lFreqAggr_TimeOut, lFreqAggr_ParamVal);
+                   } else {
+                       //Opcodes improperly defined. Disable Perflock FA support.
+                       sFreqAggr = null;
+                       sFreqAggr_init.perfLockRelease();
+                       sIsFreqAggrBoostSet = false;
+                   }
+                }
+
+                // Start launch boost v2
+                if (mIsLaunchBoostv2_enabled == true && sPerfBoost_v2 == null) {
+                    sPerfBoost_v2 = new BoostFramework();
+                }
+                if (sPerfBoost_v2 != null) {
+                   sPerfBoost_v2.perfLockAcquire(lBoost_v2_TimeOut, lBoost_v2_ParamVal);
+                   sIsLaunchBoostv2_set = true;
+                }
+            }
+
             app.setPid(startResult.pid);
             app.usingWrapper = startResult.usingWrapper;
             app.removed = false;
@@ -4046,6 +4171,9 @@ public final class ActivityManagerService extends ActivityManagerNative
                 }
             }
             checkTime(startTime, "startProcess: done updating pids map");
+            if ("activity".equals(hostingType) || "service".equals(hostingType)) {
+                mActivityTrigger.activityStartProcessTrigger(app.processName, startResult.pid);
+            }
         } catch (RuntimeException e) {
             Slog.e(TAG, "Failure starting process " + app.processName, e);
 
@@ -5411,6 +5539,9 @@ public final class ActivityManagerService extends ActivityManagerNative
                 Slog.i(TAG, "Process " + app.processName + " (pid " + pid
                         + ") has died");
                 mAllowLowerMemLevel = true;
+                if (mEnableNetOpts) {
+                    networkOptsCheck(1, app.processName);
+                }
             } else {
                 // Note that we always want to do oom adj to update our state with the
                 // new number of procs.
@@ -7029,6 +7160,27 @@ public final class ActivityManagerService extends ActivityManagerNative
             }
         }, dumpheapFilter);
 
+        if (mEnableNetOpts) {
+            IntentFilter netInfoFilter = new IntentFilter();
+            netInfoFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+            netInfoFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+            mContext.registerReceiver(new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    ActivityStack stack = mStackSupervisor.getLastStack();
+                    if (stack != null) {
+                        ActivityRecord r = stack.topRunningActivityLocked();
+                        if (r != null) {
+                            PowerManager powerManager =
+                                (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
+                            if (powerManager != null && powerManager.isInteractive())
+                                    networkOptsCheck(0, r.processName);
+                        }
+                    }
+                }
+            }, netInfoFilter);
+        }
+
         // Let system services know.
         mSystemServiceManager.startBootPhase(SystemService.PHASE_BOOT_COMPLETED);
 
@@ -8297,26 +8449,13 @@ public final class ActivityManagerService extends ActivityManagerNative
             }
         }
 
-        // Figure out the value returned when access is allowed
-        final int allowedResult;
-        if ((modeFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0) {
-            // If we're extending a persistable grant, then we need to return
-            // "targetUid" so that we always create a grant data structure to
-            // support take/release APIs
-            allowedResult = targetUid;
-        } else {
-            // Otherwise, we can return "-1" to indicate that no grant data
-            // structures need to be created
-            allowedResult = -1;
-        }
-
         if (targetUid >= 0) {
             // First...  does the target actually need this permission?
             if (checkHoldingPermissionsLocked(pm, pi, grantUri, targetUid, modeFlags)) {
                 // No need to grant the target this permission.
                 if (DEBUG_URI_PERMISSION) Slog.v(TAG_URI_PERMISSION,
                         "Target " + targetPkg + " already has full permission to " + grantUri);
-                return allowedResult;
+                return -1;
             }
         } else {
             // First...  there is no target package, so can anyone access it?
@@ -8332,7 +8471,7 @@ public final class ActivityManagerService extends ActivityManagerNative
                 }
             }
             if (allowed) {
-                return allowedResult;
+                return -1;
             }
         }
 
@@ -13085,6 +13224,33 @@ public final class ActivityManagerService extends ActivityManagerNative
         lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
         ((WindowManager)mContext.getSystemService(
                 Context.WINDOW_SERVICE)).addView(v, lp);
+    }
+
+    public final void disableOverlays() {
+        try {
+            IOverlayManager iom = IOverlayManager.Stub.asInterface(
+                    ServiceManager.getService("overlay"));
+            if (iom == null) {
+                return;
+            }
+            Log.d(TAG, "Contacting the Overlay Manager Service for the list of enabled overlays");
+            Map<String, List<OverlayInfo>> allOverlays = iom.getAllOverlays(UserHandle.USER_SYSTEM);
+            if (allOverlays != null) {
+                Log.d(TAG, "The Overlay Manager Service provided the list of enabled overlays");
+                Set<String> set = allOverlays.keySet();
+                for (String targetPackageName : set) {
+                    for (OverlayInfo oi : allOverlays.get(targetPackageName)) {
+                        if (oi.isEnabled()) {
+                            iom.setEnabled(oi.packageName, false, UserHandle.USER_SYSTEM, false);
+                            Log.d(TAG, "Now disabling \'" + oi.packageName + "\'");
+                        }
+                    }
+                }
+            }
+        } catch (RemoteException re) {
+            re.printStackTrace();
+            Log.d(TAG, "RemoteException while trying to contact the Overlay Manager Service!");
+        }
     }
 
     public void noteWakeupAlarm(IIntentSender sender, int sourceUid, String sourcePkg, String tag) {
@@ -19386,6 +19552,57 @@ public final class ActivityManagerService extends ActivityManagerNative
     }
 
     /**
+     * @hide
+     */
+    @Override
+    public void updateAssets(final int userId, @NonNull final List<String> packageNames) {
+        enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION, "updateAssets()");
+
+        synchronized(this) {
+            final long origId = Binder.clearCallingIdentity();
+            try {
+                updateAssetsLocked(userId, packageNames);
+            } finally {
+                Binder.restoreCallingIdentity(origId);
+            }
+        }
+    }
+
+    void updateAssetsLocked(final int userId, @NonNull final List<String> packagesToUpdate) {
+        final IPackageManager pm = AppGlobals.getPackageManager();
+        final Map<String, ApplicationInfo> cache = new ArrayMap<>();
+
+        final boolean updateFrameworkRes = packagesToUpdate.contains("android");
+        for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
+            final ProcessRecord app = mLruProcesses.get(i);
+            if (app.userId != userId || app.thread == null) {
+                continue;
+            }
+
+            for (final String packageName : app.pkgList.keySet()) {
+                if (updateFrameworkRes || packagesToUpdate.contains(packageName)) {
+                    try {
+                        final ApplicationInfo ai;
+                        if (cache.containsKey(packageName)) {
+                            ai = cache.get(packageName);
+                        } else {
+                            ai = pm.getApplicationInfo(packageName, 0, userId);
+                            cache.put(packageName, ai);
+                        }
+
+                        if (ai != null) {
+                            app.thread.scheduleAssetsChanged(packageName, ai);
+                        }
+                    } catch (RemoteException e) {
+                        Slog.w(TAG, String.format("Failed to update %s assets for %s",
+                                    packageName, app));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Decide based on the configuration whether we should shouw the ANR,
      * crash, etc dialogs.  The idea is that if there is no affordence to
      * press the on-screen buttons, or the user experience would be more
@@ -22243,6 +22460,15 @@ public final class ActivityManagerService extends ActivityManagerNative
             synchronized (ActivityManagerService.this) {
                 SleepTokenImpl token = new SleepTokenImpl(tag);
                 mSleepTokens.add(token);
+                if (mEnableNetOpts) {
+                    ActivityStack stack = mStackSupervisor.getLastStack();
+                    if (stack != null) {
+                        ActivityRecord r = stack.topRunningActivityLocked();
+                        if (r != null) {
+                            networkOptsCheck(1, r.processName);
+                        }
+                    }
+                }
                 updateSleepIfNeededLocked();
                 return token;
             }
@@ -22409,6 +22635,15 @@ public final class ActivityManagerService extends ActivityManagerNative
         public void release() {
             synchronized (ActivityManagerService.this) {
                 if (mSleepTokens.remove(this)) {
+                    if (mEnableNetOpts) {
+                        ActivityStack stack = mStackSupervisor.getLastStack();
+                        if (stack != null) {
+                            ActivityRecord r = stack.topRunningActivityLocked();
+                            if (r != null) {
+                                networkOptsCheck(0, r.processName);
+                            }
+                        }
+                    }
                     updateSleepIfNeededLocked();
                 }
             }

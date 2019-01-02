@@ -22,18 +22,6 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <!-- Content description of the light brightness slider (not shown on the screen). [CHAR LIMIT=NONE] -->
   <string name="accessibility_notification_brightness">چىراق يورۇقلىقى</string>
-  <!-- Content description of the profiles tile in quick settings when off (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_profiles_off">مۇھىت ھالىتى تاقاق.</string>
-  <!-- Content description of the profiles tile in quick settings (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_profiles">مۇھىت ھالىتى: <xliff:g id="profile" example="Default">%s</xliff:g>.</string>
-  <!-- Announcement made when the profiles tile changes to off (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_profiles_changed_off">مۇھىت ھالىتى تاقالدى.</string>
-  <!-- Announcement made when the profiles tile changes (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="accessibility_quick_settings_profiles_changed">مۇھىت ھالىتى <xliff:g id="profile" example="Default">%s</xliff:g> گە ئۆزگەرتىلدى.</string>
-  <!-- Content description of the profiles tile in quick settings when off (not shown on the screen). [CHAR LIMIT=NONE] -->
-  <string name="quick_settings_profiles_off">مۇھىت ھالىتى تاقاق.</string>
-  <!-- Content description of the system profiles  -->
-  <string name="quick_settings_profiles">سىستېما سەپلىمە ھۆججەتلىرى</string>
   <!-- Lights settings, LED notification -->
   <string name="led_notification_title">يورۇقلۇق تەكشىكى</string>
   <string name="led_notification_text">تەڭشەكتىن LED نى قوزغىتىش</string>
@@ -57,11 +45,13 @@
   <string name="accessibility_dpad_left">نۇربەلگە سولغا</string>
   <string name="accessibility_dpad_right">نۇر بەلگە ئوڭغا</string>
   <!-- NavBar Tuner -->
-  <!-- Name of the clock status bar icon -->
   <!-- Path data for portrait battery -->
   <!-- Path data for landscape battery -->
   <!-- Path data for circle battery -->
   <!-- Wi-Fi hotspot label when enabled -->
+  <plurals name="wifi_hotspot_connected_clients_label">
+    <item quantity="other">%1$d مۇئامىلىدار</item>
+  </plurals>
   <!-- Weather string format in expanded statusbar header -->
   <string name="status_bar_expanded_header_weather_format"><xliff:g id="temp">%1$s</xliff:g> - <xliff:g id="condition">%2$s</xliff:g></string>
   <!-- Volume stream titles - should match the string-array in AOSP -->
@@ -123,5 +113,4 @@
   <string name="quick_settings_volume_panel_label">ئاۋاز تاختىسى</string>
   <!-- Content description for Accessibility on unlocked tasks in recents -->
   <!-- Content description for Accessibility on locked tasks in recents -->
-  <!-- LiveDisplay strings -->
 </resources>

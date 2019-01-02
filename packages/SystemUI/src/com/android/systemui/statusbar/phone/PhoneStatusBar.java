@@ -326,6 +326,12 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
             "cmsecure:" + CMSettings.Secure.LOCKSCREEN_MEDIA_METADATA;
     private static final String SYSTEMUI_BURNIN_PROTECTION =
             "cmsystem:" + CMSettings.System.SYSTEMUI_BURNIN_PROTECTION;
+    private static final String QS_ROWS_PORTRAIT =
+            Settings.Secure.QS_ROWS_PORTRAIT;
+    private static final String QS_ROWS_LANDSCAPE =
+            Settings.Secure.QS_ROWS_LANDSCAPE;
+    private static final String QS_COLUMNS =
+            Settings.Secure.QS_COLUMNS;
 
     static {
         boolean onlyCoreApps;
@@ -828,7 +834,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 NAVBAR_LEFT_IN_LANDSCAPE,
                 STATUS_BAR_BRIGHTNESS_CONTROL,
                 LOCKSCREEN_MEDIA_METADATA,
-                SYSTEMUI_BURNIN_PROTECTION);
+				SYSTEMUI_BURNIN_PROTECTION,
+                QS_ROWS_PORTRAIT,
+                QS_ROWS_LANDSCAPE,
+                QS_COLUMNS);
 
         // Lastly, call to the icon policy to install/update all the icons.
         mIconPolicy = new PhoneStatusBarPolicy(mContext, mIconController, mCastController,
@@ -1089,12 +1098,14 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                     QSContainer qsContainer = (QSContainer) v.findViewById(
                             R.id.quick_settings_container);
                     qsContainer.setHost(qsh);
+                    mBrightnessMirrorController.onDensityOrFontScaleChanged();
                     mQSPanel = qsContainer.getQsPanel();
                     mQSPanel.setBrightnessMirror(mBrightnessMirrorController);
                     mKeyguardStatusBar.setQSPanel(mQSPanel);
                     mHeader = qsContainer.getHeader();
                     initSignalCluster(mHeader);
                     mHeader.setActivityStarter(PhoneStatusBar.this);
+                    mVolumeComponent.updateDialog();
                 }
             });
         }
@@ -2516,9 +2527,10 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                 if (DEBUG_MEDIA) {
                     Log.v(TAG, "DEBUG_MEDIA: Fading out album artwork");
                 }
-                if (mFingerprintUnlockController.getMode()
-                        == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK_PULSING
-                        || hideBecauseOccluded) {
+                int fpMode = mFingerprintUnlockController.getMode();
+                if (fpMode == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK_PULSING ||
+                        fpMode == FingerprintUnlockController.MODE_WAKE_AND_UNLOCK ||
+                        hideBecauseOccluded) {
 
                     // We are unlocking directly - no animation!
                     mBackdrop.setVisibility(View.GONE);
@@ -5601,6 +5613,11 @@ public class PhoneStatusBar extends BaseStatusBar implements DemoMode,
                         mBurnInProtectionController.stopShiftTimer(true);
                     }
                 }
+                break;
+            case QS_ROWS_PORTRAIT:
+            case QS_ROWS_LANDSCAPE:
+            case QS_COLUMNS:
+                updateResources();
                 break;
             default:
                 break;

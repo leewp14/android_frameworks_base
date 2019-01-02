@@ -123,6 +123,8 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
 import android.view.Display;
+import com.android.internal.app.ActivityTrigger;
+import android.util.BoostFramework;
 
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.content.ReferrerIntent;
@@ -241,6 +243,10 @@ final class ActivityStack {
     final WindowManagerService mWindowManager;
     private final RecentTasks mRecentTasks;
 
+    public BoostFramework mPerf = null;
+    public boolean mIsAnimationBoostEnabled = false;
+    public int aBoostTimeOut = 0;
+    public int aBoostParamVal[];
     /**
      * The back history of all previous (and possibly still
      * running) activities.  It contains #TaskRecord objects.
@@ -363,6 +369,8 @@ final class ActivityStack {
 
     final Handler mHandler;
 
+    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
+
     final class ActivityStackHandler extends Handler {
 
         ActivityStackHandler(Looper looper) {
@@ -456,6 +464,14 @@ final class ActivityStack {
         mRecentTasks = recentTasks;
         mTaskPositioner = mStackId == FREEFORM_WORKSPACE_STACK_ID
                 ? new LaunchingTaskPositioner() : null;
+        mIsAnimationBoostEnabled = mService.mContext.getResources().getBoolean(
+                   com.android.internal.R.bool.config_enablePerfBoostForAnimation);
+        if (mIsAnimationBoostEnabled) {
+           aBoostTimeOut = mService.mContext.getResources().getInteger(
+                   com.android.internal.R.integer.animationboost_timeout_param);
+           aBoostParamVal = mService.mContext.getResources().getIntArray(
+                   com.android.internal.R.array.animationboost_param_value);
+        }
     }
 
     void attachDisplay(ActivityStackSupervisor.ActivityDisplay activityDisplay, boolean onTop) {
@@ -1121,6 +1137,9 @@ final class ActivityStack {
 
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to PAUSING: " + prev);
         else if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Start pausing: " + prev);
+
+        mActivityTrigger.activityPauseTrigger(prev.intent, prev.info, prev.appInfo);
+
         mResumedActivity = null;
         mPausingActivity = prev;
         mLastPausedActivity = prev;
@@ -2269,7 +2288,11 @@ final class ActivityStack {
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
-        // If we are currently pausing an activity, then don't do anything until that is done.
+        mActivityTrigger.activityResumeTrigger(next.intent, next.info, next.appInfo,
+                next.task.mFullscreen);
+
+        // If we are currently pausing an activity, then don't do anything
+        // until that is done.
         if (!mStackSupervisor.allPausedActivitiesComplete()) {
             if (DEBUG_SWITCH || DEBUG_PAUSE || DEBUG_STATES) Slog.v(TAG_PAUSE,
                     "resumeTopActivityLocked: Skip resume: some activity pausing.");
@@ -2373,6 +2396,9 @@ final class ActivityStack {
         // that the previous one will be hidden soon.  This way it can know
         // to ignore it when computing the desired screen orientation.
         boolean anim = true;
+        if (mIsAnimationBoostEnabled == true && mPerf == null) {
+            mPerf = new BoostFramework();
+        }
         if (prev != null) {
             if (prev.finishing) {
                 if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION,
@@ -2384,10 +2410,8 @@ final class ActivityStack {
                     mWindowManager.prepareAppTransition(prev.task == next.task
                             ? TRANSIT_ACTIVITY_CLOSE
                             : TRANSIT_TASK_CLOSE, false);
-                    if (prev.task != next.task) {
-                        if (mStackSupervisor.mService.mPerf != null) {
-                            mStackSupervisor.mService.mPerf.cpuBoost(2000 * 1000);
-                        }
+                    if(prev.task != next.task && mPerf != null) {
+                       mPerf.perfLockAcquire(aBoostTimeOut, aBoostParamVal);
                     }
                 }
                 mWindowManager.setAppVisibility(prev.appToken, false);
@@ -2403,10 +2427,8 @@ final class ActivityStack {
                             : next.mLaunchTaskBehind
                                     ? TRANSIT_TASK_OPEN_BEHIND
                                     : TRANSIT_TASK_OPEN, false);
-                    if (prev.task != next.task) {
-                        if (mStackSupervisor.mService.mPerf != null) {
-                            mStackSupervisor.mService.mPerf.cpuBoost(2000 * 1000);
-                        }
+                    if(prev.task != next.task && mPerf != null) {
+                        mPerf.perfLockAcquire(aBoostTimeOut, aBoostParamVal);
                     }
                 }
             }
@@ -2800,6 +2822,7 @@ final class ActivityStack {
         task.setFrontOfTask();
 
         r.putInHistory();
+        mActivityTrigger.activityStartTrigger(r.intent, r.info, r.appInfo, r.task.mFullscreen);
         if (!isHomeStack() || numActivities() > 0) {
             // We want to show the starting preview window if we are
             // switching to a new task, or the next activity's process is
@@ -3340,11 +3363,15 @@ final class ActivityStack {
             r.resumeKeyDispatchingLocked();
             try {
                 r.stopped = false;
+
                 if (DEBUG_STATES) Slog.v(TAG_STATES,
                         "Moving to STOPPING: " + r + " (stop requested)");
                 r.state = ActivityState.STOPPING;
                 if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                         "Stopping visible=" + r.visible + " for " + r);
+
+                mActivityTrigger.activityStopTrigger(r.intent, r.info, r.appInfo);
+
                 if (!r.visible) {
                     mWindowManager.setAppVisibility(r.appToken, false);
                 }

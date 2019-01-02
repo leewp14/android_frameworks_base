@@ -118,7 +118,7 @@ public final class KeyboardShortcuts {
     private KeyCharacterMap mKeyCharacterMap;
 
     private KeyboardShortcuts(Context context) {
-        this.mContext = new ContextThemeWrapper(context, android.R.style.Theme_DeviceDefault_Light);
+        this.mContext = new ContextThemeWrapper(context, R.style.KeyboardShortcutsDialog);
         this.mPackageManager = AppGlobals.getPackageManager();
         loadResources(context);
     }
@@ -420,13 +420,11 @@ public final class KeyboardShortcuts {
         final AssistUtils assistUtils = new AssistUtils(mContext);
         final ComponentName assistComponent = assistUtils.getAssistComponentForUser(userId);
         PackageInfo assistPackageInfo = null;
-        if (assistComponent != null) {
-            try {
-                assistPackageInfo = mPackageManager.getPackageInfo(
-                        assistComponent.getPackageName(), 0, userId);
-            } catch (RemoteException e) {
-                Log.e(TAG, "PackageManagerService is dead");
-            }
+        try {
+            assistPackageInfo = mPackageManager.getPackageInfo(
+                    assistComponent.getPackageName(), 0, userId);
+        } catch (RemoteException e) {
+            Log.e(TAG, "PackageManagerService is dead");
         }
 
         if (assistPackageInfo != null) {

@@ -16,6 +16,7 @@ package com.android.systemui.qs.customize;
 
 import android.app.AlertDialog;
 import android.app.AlertDialog.Builder;
+import android.app.ThemeManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -265,8 +266,16 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         holder.mTileView.setAppLabel(info.appLabel);
         holder.mTileView.setShowAppLabel(position > mEditIndex && !info.isSystem);
 
+        final boolean selectable = !mAccessibilityMoving || position < mEditIndex;
+        if (!(mAccessibilityManager.isTouchExplorationEnabled() && selectable)) {
+            holder.mTileView.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    move(holder.getAdapterPosition(), mEditIndex, holder.mTileView);
+                }
+            });
+        }
         if (mAccessibilityManager.isTouchExplorationEnabled()) {
-            final boolean selectable = !mAccessibilityMoving || position < mEditIndex;
             holder.mTileView.setClickable(selectable);
             holder.mTileView.setFocusable(selectable);
             holder.mTileView.setImportantForAccessibility(selectable
@@ -468,13 +477,14 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
     private class TileItemDecoration extends ItemDecoration {
         private final ColorDrawable mDrawable;
 
+        private int mAdapterBackground;
         private TileItemDecoration(Context context) {
             TypedArray ta =
-                    context.obtainStyledAttributes(new int[]{android.R.attr.colorSecondary});
-            mDrawable = new ColorDrawable(ta.getColor(0, 0));
+                    context.obtainStyledAttributes(new int[]{R.attr.adapterBackground});
+            mAdapterBackground = ta.getColor(0, 0);
+            mDrawable = new ColorDrawable();
             ta.recycle();
         }
-
 
         @Override
         public void onDraw(Canvas c, RecyclerView parent, State state) {
@@ -494,6 +504,10 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
                         .getLayoutParams();
                 final int top = child.getTop() + params.topMargin +
                         Math.round(ViewCompat.getTranslationY(child));
+                // Set drawable color
+                mDrawable.setColor(ThemeManager.shouldOverlayEnabled(mContext) ?
+                        mContext.getResources().getColor(R.color.qs_edit_item_decoration_bg)
+                        : mAdapterBackground);
                 // Draw full width, in case there aren't tiles all the way across.
                 mDrawable.setBounds(0, top, width, bottom);
                 mDrawable.draw(c);

@@ -76,7 +76,7 @@
     <java-symbol type="bool" name="config_softap_extention" />
 
     <!-- PlatLogo -->
-    <java-symbol type="drawable" name="platlogo_lineage" />
+    <java-symbol type="drawable" name="platlogo_dot" />
 
     <!-- Blur effects -->
     <java-symbol type="bool" name="config_uiBlurEnabled" />
@@ -109,7 +109,4 @@
 
     <!-- Whether light up buttons only when pressed -->
     <java-symbol type="bool" name="config_buttonLightOnKeypressOnly" />
-
-    <!-- global actions (zen mode buttons) -->
-    <java-symbol type="id" name="option4" />
 </resources>

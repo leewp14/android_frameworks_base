@@ -50,6 +50,7 @@ import android.media.AudioManager;
 import android.os.BatteryManager;
 import android.os.CancellationSignal;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.Message;
 import android.os.RemoteException;
@@ -57,6 +58,8 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.pocket.IPocketCallback;
+import android.pocket.PocketManager;
 import android.provider.Settings;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
@@ -64,6 +67,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
 import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.Log;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
@@ -139,6 +143,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_DREAMING_STATE_CHANGED = 333;
     private static final int MSG_USER_UNLOCKED = 334;
 
+    // Additional messages should be 600+
+    private static final int MSG_POCKET_STATE_CHANGED = 600;
+
     /** Fingerprint state: Not listening to fingerprint. */
     private static final int FINGERPRINT_STATE_STOPPED = 0;
 
@@ -210,6 +217,32 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private TrustManager mTrustManager;
     private UserManager mUserManager;
     private int mFingerprintRunningState = FINGERPRINT_STATE_STOPPED;
+
+    private BoostFramework mPerf = null;
+    private boolean lIsPerfBoostEnabled;
+    private int[] mBoostParamVal;
+    private int mBoostDuration;
+
+    private PocketManager mPocketManager;
+    private boolean mIsDeviceInPocket;
+    private final IPocketCallback mPocketCallback = new IPocketCallback.Stub() {
+        @Override
+        public void onStateChanged(boolean isDeviceInPocket, int reason) {
+            boolean changed = false;
+            if (reason == PocketManager.REASON_SENSOR) {
+                if (isDeviceInPocket != mIsDeviceInPocket) {
+                    mIsDeviceInPocket = isDeviceInPocket;
+                    changed = true;
+                }
+            } else {
+                changed = isDeviceInPocket != mIsDeviceInPocket;
+                mIsDeviceInPocket = false;
+            }
+            if (changed) {
+                mHandler.sendEmptyMessage(MSG_POCKET_STATE_CHANGED);
+            }
+        }
+    };
 
     private final Handler mHandler = new Handler() {
         @Override
@@ -295,6 +328,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     break;
                 case MSG_USER_UNLOCKED:
                     handleUserUnlocked();
+                    break;
+                case MSG_POCKET_STATE_CHANGED:
+                    updateFingerprintListeningState();
                     break;
             }
         }
@@ -453,6 +489,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         // wake-up (if Keyguard is not showing), so we don't need to listen until Keyguard is
         // fully gone.
         mFingerprintAlreadyAuthenticated = isUnlockingWithFingerprintAllowed();
+
+        // Intercept the authorized FP unlock while the screen is off
+        if (lIsPerfBoostEnabled && !mScreenOn) {
+            Log.i(TAG, "Dispatching FP unlock boost.");
+            mPerf.perfLockAcquire(mBoostDuration, mBoostParamVal);
+        }
+
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -607,8 +650,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     public boolean isUnlockingWithFingerprintAllowed() {
-        return mStrongAuthTracker.isUnlockingWithFingerprintAllowed()
-                && !hasFingerprintUnlockTimedOut(sCurrentUser);
+        return (mStrongAuthTracker.isUnlockingWithFingerprintAllowed()
+                && !hasFingerprintUnlockTimedOut(sCurrentUser))
+                || (Settings.System.getInt(mContext.getContentResolver(),
+                   Settings.System.FP_UNLOCK_KEYSTORE, 0) == 1);
     }
 
     public boolean needsSlowUnlockTransition() {
@@ -1141,6 +1186,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             e.rethrowAsRuntimeException();
         }
 
+        // Initialise FP unlock boost
+        mBoostParamVal = mContext.getResources().getIntArray(
+                com.android.internal.R.array.qboost_strong_param_value);
+        lIsPerfBoostEnabled = mBoostParamVal.length != 0;
+        mBoostDuration = mContext.getResources().getInteger(
+                com.android.internal.R.integer.fpunlockboost_duration);
+
+        if (lIsPerfBoostEnabled) {
+            mPerf = new BoostFramework();
+        }
+
         IntentFilter strongAuthTimeoutFilter = new IntentFilter();
         strongAuthTimeoutFilter.addAction(ACTION_STRONG_AUTH_TIMEOUT);
         context.registerReceiver(mStrongAuthTimeoutReceiver, strongAuthTimeoutFilter,
@@ -1148,6 +1204,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         mTrustManager = (TrustManager) context.getSystemService(Context.TRUST_SERVICE);
         mTrustManager.registerTrustListener(this);
         new LockPatternUtils(context).registerStrongAuthTracker(mStrongAuthTracker);
+
+        mPocketManager = (PocketManager) context.getSystemService(Context.POCKET_SERVICE);
+        if (mPocketManager != null) {
+            mPocketManager.addCallback(mPocketCallback);
+        }
 
         mFpm = (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
         updateFingerprintListeningState();
@@ -1170,7 +1231,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private boolean shouldListenForFingerprint() {
         if (!mSwitchingUser && !mFingerprintAlreadyAuthenticated
-                && !isFingerprintDisabled(getCurrentUser())) {
+                && !isFingerprintDisabled(getCurrentUser())
+                && !mIsDeviceInPocket) {
             if (mContext.getResources().getBoolean(
                     com.android.keyguard.R.bool.config_fingerprintWakeAndUnlock)) {
                 return mKeyguardIsVisible || !mDeviceInteractive || mBouncer || mGoingToSleep;

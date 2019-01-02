@@ -1658,8 +1658,7 @@ public final class SQLiteDatabase extends SQLiteClosable {
         executeSql(sql, bindArgs);
     }
 
-    /** {@hide} */
-    public int executeSql(String sql, Object[] bindArgs) throws SQLException {
+    private int executeSql(String sql, Object[] bindArgs) throws SQLException {
         acquireReference();
         try {
             if (DatabaseUtils.getSqlStatementType(sql) == DatabaseUtils.STATEMENT_ATTACH) {

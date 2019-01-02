@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?android:attr/tilesColor"
         android:autoMirrored="true"
         android:width="32.0dp"
         android:height="32.0dp"
@@ -22,11 +22,11 @@
     <path
         android:pathData="M14.1,14.1l7.9,0.0 0.0,-11.5 -20.0,20.0 12.1,0.0z"
         android:fillAlpha="0.3"
-        android:fillColor="#FFFFFF"/>
+        android:fillColor="@color/qs_tile_tint_active"/>
     <path
         android:pathData="M21.9,17.0l-1.1,-1.1 -1.9,1.9 -1.9,-1.9 -1.1,1.1 1.9,1.9 -1.9,1.9 1.1,1.1 1.9,-1.9 1.9,1.9 1.1,-1.1 -1.9,-1.9z"
-        android:fillColor="#FFFFFF"/>
+        android:fillColor="@color/qs_tile_tint_active"/>
     <path
         android:pathData="M14.1,14.1l2.9,0.0 0.0,-6.5 -15.0,15.0 12.1,0.0z"
-        android:fillColor="#FFFFFF"/>
+        android:fillColor="@color/qs_tile_tint_active"/>
 </vector>

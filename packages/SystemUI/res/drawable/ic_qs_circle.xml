@@ -13,14 +13,14 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?android:attr/tilesColor"
         android:width="64dp"
         android:height="64dp"
         android:viewportWidth="2.2"
         android:viewportHeight="2.2">
 
     <path
-        android:strokeColor="#4DFFFFFF"
+        android:strokeColor="@color/qs_tile_tint_inactive"
         android:strokeWidth=".05"
         android:pathData="M.1,1.1
         c0,.55  .45,1   1,1

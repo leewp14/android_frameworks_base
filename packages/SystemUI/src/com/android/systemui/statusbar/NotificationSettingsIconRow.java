@@ -239,27 +239,13 @@ public class NotificationSettingsIconRow extends FrameLayout implements View.OnC
     }
 
     @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
-        if (mIconPlaced) {
-            setIconLocation(mOnLeft, true /* force */);
-        }
-    }
-
-    @Override
     public void onRtlPropertiesChanged(int layoutDirection) {
-        if (mIconPlaced) {
-            setIconLocation(mOnLeft, true /* force */);
-        }
+        setIconLocation(mOnLeft);
     }
 
     public void setIconLocation(boolean onLeft) {
-        setIconLocation(onLeft, false /* force */);
-    }
-
-    private void setIconLocation(boolean onLeft, boolean force) {
-        if (mParent == null || mGearIcon.getWidth() == 0
-                || (!force && ((mIconPlaced && onLeft == mOnLeft) || mSnapping))) {
+        if ((mIconPlaced && onLeft == mOnLeft) || mSnapping || mParent == null
+                || mGearIcon.getWidth() == 0) {
             // Do nothing
             return;
         }

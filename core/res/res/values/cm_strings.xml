@@ -42,6 +42,8 @@
     <string name="reboot_download">Download</string>
     <!-- Button to soft restart the device, within the Restart Options dialog -->
     <string name="reboot_soft">Soft restart</string>
+    <!-- Button to soft reboot the device, within the Reboot Options dialog -->
+    <string name="reboot_systemui">Restart SystemUI</string>
 
     <!-- Title of dialog to confirm restarting. -->
     <string name="reboot_title">Restart</string>
@@ -159,8 +161,4 @@
     <string name="tethered_notification_no_device_message">No connected device</string>
     <string name="tethered_notification_one_device_message"><xliff:g id="count">%1$s</xliff:g> connected device</string>
     <string name="tethered_notification_multi_device_message"><xliff:g id="count">%1$s</xliff:g> connected devices</string>
-
-    <!-- Zen mode buttons -->
-    <string name="silent_mode_priority">Priority</string>
-    <string name="silent_mode_none">None</string>
 </resources>

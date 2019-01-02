@@ -83,7 +83,7 @@ public class NanoAppFilter {
         mAppId = in.readLong();
         mAppVersion = in.readInt();
         mVersionRestrictionMask = in.readInt();
-        mAppIdVendorMask = in.readLong();
+        mAppIdVendorMask = in.readInt();
     }
 
     public int describeContents() {
@@ -91,6 +91,7 @@ public class NanoAppFilter {
     }
 
     public void writeToParcel(Parcel out, int flags) {
+
         out.writeLong(mAppId);
         out.writeInt(mAppVersion);
         out.writeInt(mVersionRestrictionMask);

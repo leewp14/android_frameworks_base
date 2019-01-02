@@ -81,14 +81,32 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
 
     @Override
     public Intent getLongClickIntent() {
-        return CELLULAR_SETTINGS;
+        return null;
     }
 
     @Override
     protected void handleClick() {
         MetricsLogger.action(mContext, getMetricsCategory());
         if (mDataController.isMobileDataSupported()) {
-            showDetail(true);
+            if(mController.isAdvancedDataTileEnabled()) {
+                mDataController.setMobileDataEnabled(!mDataController.isMobileDataEnabled());
+            } else {
+                showDetail(true);
+            }
+        } else {
+            mHost.startActivityDismissingKeyguard(CELLULAR_SETTINGS);
+        }
+    }
+
+    @Override
+    protected void handleLongClick() {
+        MetricsLogger.action(mContext, getMetricsCategory());
+        if(mController.isAdvancedDataTileEnabled()) {
+            if (mDataController.isMobileDataSupported()) {
+                showDetail(true);
+            } else {
+                mHost.startActivityDismissingKeyguard(CELLULAR_SETTINGS);
+            }
         } else {
             mHost.startActivityDismissingKeyguard(CELLULAR_SETTINGS);
         }
@@ -198,7 +216,7 @@ public class CellularTile extends QSTile<QSTile.SignalState> {
         @Override
         public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
                 int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
-                String description, boolean isWide, int subId, boolean roaming) {
+                String description, boolean isWide, int subId, boolean roaming, boolean isMobileIms) {
             if (qsIcon == null) {
                 // Not data sim, don't display.
                 return;

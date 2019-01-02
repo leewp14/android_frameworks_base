@@ -115,6 +115,8 @@ public class AlertDialog extends Dialog implements DialogInterface {
     @Deprecated
     public static final int THEME_DEVICE_DEFAULT_LIGHT = 5;
 
+
+
     /**
      * No layout hint.
      * @hide

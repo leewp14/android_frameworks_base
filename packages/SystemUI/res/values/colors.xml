@@ -17,6 +17,7 @@
  */
 -->
 <resources>
+    <color name="black">#000000</color>
     <drawable name="notification_number_text_color">#ff000000</drawable>
     <drawable name="ticker_background_color">#ff1d1d1d</drawable>
     <drawable name="system_bar_background">@color/system_bar_background_opaque</drawable>
@@ -147,9 +148,10 @@
 
     <color name="remote_input_accent">#eeeeee</color>
 
-    <color name="qs_tile_tint_unavailable">#40ffffff</color>
-    <color name="qs_tile_tint_inactive">#4dffffff</color>
+    <color name="qs_tile_tint_unavailable">#66ffffff</color>
+    <color name="qs_tile_tint_inactive">#66ffffff</color>
     <color name="qs_tile_tint_active">#ffffffff</color>
+	<color name="external_qs_tile_tint_color">?android:attr/tilesColor</color>
 
     <!-- Keyboard shortcuts colors -->
     <color name="ksh_application_group_color">#fff44336</color>
