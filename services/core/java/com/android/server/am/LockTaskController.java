@@ -481,6 +481,7 @@ public class LockTaskController {
                 getStatusBarService().showPinningEnterExitToast(false /* entering */);
             }
             mWindowManager.onLockTaskStateChanged(LOCK_TASK_MODE_NONE);
+            getStatusBarService().screenPinningStateChanged(false);
         } catch (RemoteException ex) {
             throw new RuntimeException(ex);
         } finally {
@@ -600,6 +601,7 @@ public class LockTaskController {
             if (getDevicePolicyManager() != null) {
                 getDevicePolicyManager().notifyLockTaskModeChanged(true, packageName, userId);
             }
+            getStatusBarService().screenPinningStateChanged(true);
         } catch (RemoteException ex) {
             throw new RuntimeException(ex);
         }
@@ -777,18 +779,24 @@ public class LockTaskController {
      * leaves the pinned mode.
      */
     private void lockKeyguardIfNeeded() {
+        if (shouldLockKeyguard()) {
+            mWindowManager.lockNow(null);
+            mWindowManager.dismissKeyguard(null /* callback */, null /* message */);
+            getLockPatternUtils().requireCredentialEntry(USER_ALL);
+        }
+    }
+
+    private boolean shouldLockKeyguard() {
+        // This functionality should be kept consistent with
+        // com.android.settings.security.ScreenPinningSettings (see b/127605586)
         try {
-            boolean shouldLockKeyguard = Settings.Secure.getIntForUser(
+            return Settings.Secure.getIntForUser(
                     mContext.getContentResolver(),
-                    Settings.Secure.LOCK_TO_APP_EXIT_LOCKED,
-                    USER_CURRENT) != 0;
-            if (shouldLockKeyguard) {
-                mWindowManager.lockNow(null);
-                mWindowManager.dismissKeyguard(null /* callback */, null /* message */);
-                getLockPatternUtils().requireCredentialEntry(USER_ALL);
-            }
+                    Settings.Secure.LOCK_TO_APP_EXIT_LOCKED, USER_CURRENT) != 0;
         } catch (Settings.SettingNotFoundException e) {
-            // No setting, don't lock.
+            // Log to SafetyNet for b/127605586
+            android.util.EventLog.writeEvent(0x534e4554, "127605586", -1, "");
+            return getLockPatternUtils().isSecure(USER_CURRENT);
         }
     }
 

@@ -67,6 +67,7 @@ import android.database.sqlite.SQLiteDebug;
 import android.database.sqlite.SQLiteDebug.DbStats;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Typeface;
 import android.graphics.ImageDecoder;
 import android.hardware.display.DisplayManagerGlobal;
 import android.net.ConnectivityManager;
@@ -359,6 +360,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
 
     final GcIdler mGcIdler = new GcIdler();
+    final PurgeIdler mPurgeIdler = new PurgeIdler();
+
+    boolean mPurgeIdlerScheduled = false;
     boolean mGcIdlerScheduled = false;
 
     static volatile Handler sMainThreadHandler;  // set once in main()
@@ -1595,6 +1599,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int RUN_ISOLATED_ENTRY_POINT = 158;
         public static final int EXECUTE_TRANSACTION = 159;
         public static final int RELAUNCH_ACTIVITY = 160;
+        public static final int PURGE_RESOURCES = 161;
 
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
@@ -1638,6 +1643,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case RUN_ISOLATED_ENTRY_POINT: return "RUN_ISOLATED_ENTRY_POINT";
                     case EXECUTE_TRANSACTION: return "EXECUTE_TRANSACTION";
                     case RELAUNCH_ACTIVITY: return "RELAUNCH_ACTIVITY";
+                    case PURGE_RESOURCES: return "PURGE_RESOURCES";
                 }
             }
             return Integer.toString(code);
@@ -1675,6 +1681,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case UNBIND_SERVICE:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceUnbind");
                     handleUnbindService((BindServiceData)msg.obj);
+                    schedulePurgeIdler();
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case SERVICE_ARGS:
@@ -1685,6 +1692,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case STOP_SERVICE:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceStop");
                     handleStopService((IBinder)msg.obj);
+                    schedulePurgeIdler();
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case CONFIGURATION_CHANGED:
@@ -1818,6 +1826,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case RELAUNCH_ACTIVITY:
                     handleRelaunchActivityLocally((IBinder) msg.obj);
                     break;
+                case PURGE_RESOURCES:
+                    schedulePurgeIdler();
+                    break;
             }
             Object obj = msg.obj;
             if (obj instanceof SomeArgs) {
@@ -1870,6 +1881,17 @@ public final class ActivityThread extends ClientTransactionHandler {
         @Override
         public final boolean queueIdle() {
             doGcIfNeeded();
+            nPurgePendingResources();
+            return false;
+        }
+    }
+
+    final class PurgeIdler implements MessageQueue.IdleHandler {
+        @Override
+        public boolean queueIdle() {
+            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "purgePendingResources");
+            nPurgePendingResources();
+            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
             return false;
         }
     }
@@ -2179,6 +2201,22 @@ public final class ActivityThread extends ClientTransactionHandler {
             Looper.myQueue().removeIdleHandler(mGcIdler);
         }
         mH.removeMessages(H.GC_WHEN_IDLE);
+    }
+
+    void schedulePurgeIdler() {
+        if (!mPurgeIdlerScheduled) {
+            mPurgeIdlerScheduled = true;
+            Looper.myQueue().addIdleHandler(mPurgeIdler);
+        }
+        mH.removeMessages(H.PURGE_RESOURCES);
+    }
+
+    void unschedulePurgeIdler() {
+        if (mPurgeIdlerScheduled) {
+            mPurgeIdlerScheduled = false;
+            Looper.myQueue().removeIdleHandler(mPurgeIdler);
+        }
+        mH.removeMessages(H.PURGE_RESOURCES);
     }
 
     void doGcIfNeeded() {
@@ -3906,12 +3944,13 @@ public final class ActivityThread extends ClientTransactionHandler {
                 l.softInputMode = (l.softInputMode
                         & (~WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION))
                         | forwardBit;
-                if (r.activity.mVisibleFromClient) {
-                    ViewManager wm = a.getWindowManager();
-                    View decor = r.window.getDecorView();
-                    wm.updateViewLayout(decor, l);
-                }
             }
+
+            if (r.activity.mVisibleFromClient) {
+                ViewManager wm = a.getWindowManager();
+                View decor = r.window.getDecorView();
+                wm.updateViewLayout(decor, l);
+             }
 
             r.activity.mVisibleFromServer = true;
             mNumVisibleActivities++;
@@ -4461,6 +4500,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
             r.setState(ON_DESTROY);
         }
+        schedulePurgeIdler();
         mActivities.remove(token);
         StrictMode.decrementExpectedActivityCount(activityClass);
         return r;
@@ -5202,9 +5242,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (configDiff != 0) {
             // Ask text layout engine to free its caches if there is a locale change
             boolean hasLocaleConfigChange = ((configDiff & ActivityInfo.CONFIG_LOCALE) != 0);
-            if (hasLocaleConfigChange) {
-                Canvas.freeTextLayoutCaches();
-                if (DEBUG_CONFIGURATION) Slog.v(TAG, "Cleared TextLayout Caches");
+            boolean hasFontConfigChange = ((configDiff & ActivityInfo.CONFIG_THEME_FONT) != 0);
+            if (hasLocaleConfigChange || hasFontConfigChange) {
+                 Canvas.freeTextLayoutCaches();
+                if (hasFontConfigChange) {
+                    Typeface.recreateDefaults();
+                }
+                 if (DEBUG_CONFIGURATION) Slog.v(TAG, "Cleared TextLayout Caches");
             }
         }
     }
@@ -6683,6 +6727,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     // ------------------ Regular JNI ------------------------
-
+    private native void nPurgePendingResources();
     private native void nDumpGraphicsInfo(FileDescriptor fd);
 }

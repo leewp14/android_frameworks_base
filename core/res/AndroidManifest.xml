@@ -46,6 +46,7 @@
     <protected-broadcast android:name="android.intent.action.PACKAGE_DATA_CLEARED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_FIRST_LAUNCH" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_NEEDS_VERIFICATION" />
+    <protected-broadcast android:name="com.qualcomm.qti.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_VERIFIED" />
     <protected-broadcast android:name="android.intent.action.PACKAGES_SUSPENDED" />
     <protected-broadcast android:name="android.intent.action.PACKAGES_UNSUSPENDED" />
@@ -366,6 +367,7 @@
     <protected-broadcast android:name="android.net.wifi.p2p.PEERS_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.p2p.CONNECTION_STATE_CHANGE" />
     <protected-broadcast android:name="android.net.wifi.p2p.PERSISTENT_GROUPS_CHANGED" />
+    <protected-broadcast android:name="android.net.wifi.DPP_EVENT" />
     <protected-broadcast android:name="android.net.conn.TETHER_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.conn.INET_CONDITION_ACTION" />
     <protected-broadcast android:name="android.net.conn.NETWORK_CONDITIONS_MEASURED" />
@@ -399,6 +401,8 @@
 
     <protected-broadcast android:name="android.telecom.action.DEFAULT_DIALER_CHANGED" />
     <protected-broadcast android:name="android.provider.action.DEFAULT_SMS_PACKAGE_CHANGED" />
+    <protected-broadcast android:name="android.provider.action.SMS_MMS_DB_CREATED" />
+    <protected-broadcast android:name="android.provider.action.SMS_MMS_DB_LOST" />
     <protected-broadcast android:name="android.intent.action.CONTENT_CHANGED" />
     <protected-broadcast android:name="android.provider.Telephony.MMS_DOWNLOADED" />
 
@@ -603,13 +607,11 @@
     <protected-broadcast android:name="android.intent.action.DOCK_IDLE" />
     <protected-broadcast android:name="android.intent.action.DOCK_ACTIVE" />
 
-    <!-- LineageOS additions -->
+    <!-- Font service -->
+    <protected-broadcast android:name="com.android.server.ACTION_FONT_CHANGED" />
 
-    <!-- Used to launch a common app (FlipFlap) for devices with flip cover. -->
-    <protected-broadcast android:name="lineageos.intent.action.LID_STATE_CHANGED" />
-
-    <!-- Used for long press power torch feature - automatic turn off on timeout -->
-    <protected-broadcast android:name="com.android.server.policy.PhoneWindowManager.ACTION_TORCH_OFF" />
+    <!-- Used to get active package name. -->
+    <protected-broadcast android:name="android.intent.action.ACTIVE_PACKAGE_CHANGED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -1003,7 +1005,7 @@
 
     <!-- Allows a calling application which manages it own calls through the self-managed
          {@link android.telecom.ConnectionService} APIs.  See
-         {@link android.telecom.PhoneAccount#CAPABILITY_SELF_MANAGED for more information on the
+         {@link android.telecom.PhoneAccount#CAPABILITY_SELF_MANAGED} for more information on the
          self-managed ConnectionService APIs.
          <p>Protection level: normal
     -->
@@ -1088,9 +1090,9 @@
         android:priority="700" />
 
     <!-- Required to be able to access the camera device.
-         <p>This will automatically enforce the <a
-         href="{@docRoot}guide/topics/manifest/uses-feature-element.html">
-         <uses-feature>}</a> manifest element for <em>all</em> camera features.
+         <p>This will automatically enforce the
+         <a href="{@docRoot}guide/topics/manifest/uses-feature-element.html">
+         uses-feature</a> manifest element for <em>all</em> camera features.
          If you do not require all camera features or can properly operate if a camera
          is not available, then you must modify your manifest as appropriate in order to
          install on devices that don't support all camera features.</p>
@@ -2355,6 +2357,13 @@
         android:description="@string/permdesc_getPackageSize"
         android:protectionLevel="normal" />
 
+    <!-- @hide Allows an application to change the package signature as
+         seen by applications -->
+    <permission android:name="android.permission.FAKE_PACKAGE_SIGNATURE"
+        android:protectionLevel="dangerous"
+        android:label="@string/permlab_fakePackageSignature"
+        android:description="@string/permdesc_fakePackageSignature" />
+
     <!-- @deprecated No longer useful, see
          {@link android.content.pm.PackageManager#addPackageToPreferred}
          for details. -->
@@ -3405,6 +3414,11 @@
     <permission android:name="android.permission.STATSCOMPANION"
         android:protectionLevel="signature" />
 
+    <!-- @hide Allows an application to reset the device battery statistics -->
+    <permission android:name="android.permission.RESET_BATTERY_STATS"
+        android:permissionGroup="android.permission-group.SYSTEM_TOOLS"
+        android:protectionLevel="signature|system|development" />
+
     <!-- @SystemApi Allows an application to control the backup and restore process.
     <p>Not for use by third-party applications.
          @hide pending API council -->
@@ -3563,6 +3577,13 @@
     -->
     <permission android:name="android.permission.BIND_PACKAGE_VERIFIER"
         android:protectionLevel="signature" />
+
+    <!-- Allows an application to access the font manager
+         @hide -->
+    <permission android:name="android.permission.ACCESS_FONT_MANAGER"
+        android:label="@string/permlab_accessFontManager"
+        android:description="@string/permdesc_accessFontManager"
+        android:protectionLevel="signatureOrSystem" />
 
     <!-- @SystemApi @hide Allows an application to mark other applications as harmful -->
     <permission android:name="android.permission.SET_HARMFUL_APP_WARNINGS"
@@ -4007,6 +4028,17 @@
     <permission android:name="android.permission.PREVENT_POWER_KEY"
                 android:protectionLevel="signature|privileged" />
 
+    <!-- Allows an application to toggle navigation button editor.
+         @hide -->
+    <permission android:name="android.permission.NAVIGATION_EDITOR"
+        android:label="@string/permlab_toggleNavigationEditor"
+        android:description="@string/permdesc_toggleNavigationEditor"
+        android:protectionLevel="signatureOrSystem" />
+
+
+    <!-- Weather on lockscreen -->
+    <uses-permission android:name="org.pixelexperience.weather.client.READ_WEATHER" />
+
     <application android:process="system"
                  android:persistent="true"
                  android:hasCode="false"
@@ -4404,6 +4436,9 @@
                     android:name="android.accessibilityservice"
                     android:resource="@xml/autofill_compat_accessibility_service" />
         </service>
+
+        <service android:name="com.android.server.smartpixels.SmartPixelsService"
+                 android:exported="true" />
 
 </application>
 

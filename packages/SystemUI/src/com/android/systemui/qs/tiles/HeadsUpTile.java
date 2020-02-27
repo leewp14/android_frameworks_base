@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2015 The CyanogenMod Project
- * Copyright (C) 2017 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,28 +16,26 @@
 
 package com.android.systemui.qs.tiles;
 
+import android.content.ComponentName;
 import android.content.Intent;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.service.quicksettings.Tile;
 
-import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.qs.GlobalSetting;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
+import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.R;
 
-import org.lineageos.internal.logging.LineageMetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 
 /** Quick settings tile: Heads up **/
 public class HeadsUpTile extends QSTileImpl<BooleanState> {
 
-    private final Icon mIcon = ResourceIcon.get(R.drawable.ic_qs_heads_up);
-
-    private static final Intent NOTIFICATION_SETTINGS =
-            new Intent("android.settings.NOTIFICATION_SETTINGS");
-
     private final GlobalSetting mSetting;
+
+   private final Icon mIcon = ResourceIcon.get(R.drawable.ic_qs_heads_up);
 
     public HeadsUpTile(QSHost host) {
         super(host);
@@ -57,14 +54,20 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
     }
 
     @Override
-    protected void handleClick() {
+    public void handleClick() {
         setEnabled(!mState.value);
         refreshState();
     }
 
     @Override
     public Intent getLongClickIntent() {
-        return NOTIFICATION_SETTINGS;
+        return new Intent().setComponent(new ComponentName(
+            "com.android.settings", "com.android.settings.Settings$HeadsUpSettingsActivity"));
+    }
+
+    @Override
+    public CharSequence getTileLabel() {
+        return mContext.getString(R.string.quick_settings_heads_up_label);
     }
 
     private void setEnabled(boolean enabled) {
@@ -75,39 +78,43 @@ public class HeadsUpTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
-        final int value = arg instanceof Integer ? (Integer) arg : mSetting.getValue();
+
+        if (state.slash == null) {
+            state.slash = new SlashState();
+        }
+        state.icon = mIcon;
+
+        final int value = arg instanceof Integer ? (Integer)arg : mSetting.getValue();
         final boolean headsUp = value != 0;
         state.value = headsUp;
         state.label = mContext.getString(R.string.quick_settings_heads_up_label);
-        state.icon = mIcon;
         if (headsUp) {
             state.contentDescription =  mContext.getString(
                     R.string.accessibility_quick_settings_heads_up_on);
+            state.slash.isSlashed = false;
             state.state = Tile.STATE_ACTIVE;
         } else {
             state.contentDescription =  mContext.getString(
                     R.string.accessibility_quick_settings_heads_up_off);
+            state.slash.isSlashed = true;
             state.state = Tile.STATE_INACTIVE;
         }
     }
 
     @Override
-    public CharSequence getTileLabel() {
-        return mContext.getString(R.string.quick_settings_heads_up_label);
-    }
-
-    @Override
     protected String composeChangeAnnouncement() {
         if (mState.value) {
-            return mContext.getString(R.string.accessibility_quick_settings_heads_up_changed_on);
+            return mContext.getString(
+                    R.string.accessibility_quick_settings_heads_up_changed_on);
         } else {
-            return mContext.getString(R.string.accessibility_quick_settings_heads_up_changed_off);
+            return mContext.getString(
+                    R.string.accessibility_quick_settings_heads_up_changed_off);
         }
     }
 
     @Override
     public int getMetricsCategory() {
-        return LineageMetricsLogger.TILE_HEADS_UP;
+        return MetricsEvent.DOTEXTRAS;
     }
 
     @Override

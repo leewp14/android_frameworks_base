@@ -23,6 +23,8 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
+import android.provider.Settings.Secure;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Slog;
@@ -45,8 +47,6 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 
-import org.lineageos.internal.util.LineageLockPatternUtils;
-
 import java.io.PrintWriter;
 
 /**
@@ -62,7 +62,6 @@ public class KeyguardBouncer {
     protected final Context mContext;
     protected final ViewMediatorCallback mCallback;
     protected final LockPatternUtils mLockPatternUtils;
-    private final LineageLockPatternUtils mLineageLockPatternUtils;
     protected final ViewGroup mContainer;
     private final FalsingManager mFalsingManager;
     private final DismissCallbackRegistry mDismissCallbackRegistry;
@@ -109,7 +108,6 @@ public class KeyguardBouncer {
         mDismissCallbackRegistry = dismissCallbackRegistry;
         mExpansionCallback = expansionCallback;
         mHandler = new Handler();
-        mLineageLockPatternUtils = new LineageLockPatternUtils(mContext);
     }
 
     public void show(boolean resetSecuritySelection) {
@@ -439,7 +437,7 @@ public class KeyguardBouncer {
                 unlockSequence = UNLOCK_SEQUENCE_FORCE_BOUNCER;
             } else if ((mode == SecurityMode.Pattern || mode == SecurityMode.Password
                     || mode == SecurityMode.PIN) && (mLockPatternUtils != null
-                    && mLineageLockPatternUtils.shouldPassToSecurityView(
+                    && mLockPatternUtils.shouldPassToSecurityView(
                             KeyguardUpdateMonitor.getCurrentUser()))) {
                 // "Bouncer first" mode is only available to some security methods
                 unlockSequence = UNLOCK_SEQUENCE_BOUNCER_FIRST;

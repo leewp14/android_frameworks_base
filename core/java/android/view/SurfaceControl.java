@@ -74,7 +74,8 @@ public class SurfaceControl implements Parcelable {
             boolean allLayers, boolean useIdentityTransform, int rotation);
     private static native GraphicBuffer nativeScreenshotToBuffer(IBinder displayToken,
             Rect sourceCrop, int width, int height, int minLayer, int maxLayer,
-            boolean allLayers, boolean useIdentityTransform, int rotation);
+            boolean allLayers, boolean useIdentityTransform, int rotation,
+            boolean captureSecureLayers);
     private static native void nativeScreenshot(IBinder displayToken, Surface consumer,
             Rect sourceCrop, int width, int height, int minLayer, int maxLayer,
             boolean allLayers, boolean useIdentityTransform);
@@ -264,6 +265,14 @@ public class SurfaceControl implements Parcelable {
      *
      */
     public static final int FX_SURFACE_DIM = 0x00020000;
+
+    /**
+     * Surface creation flag: Creates a container surface.
+     * This surface will have no buffers and will only be used
+     * as a container for other surfaces, or for its InputInfo.
+     * @hide
+     */
+    public static final int FX_SURFACE_CONTAINER = 0x00080000;
 
     /**
      * Mask used for FX values above.
@@ -521,11 +530,37 @@ public class SurfaceControl implements Parcelable {
          */
         public Builder setColorLayer(boolean isColorLayer) {
             if (isColorLayer) {
-                mFlags |= FX_SURFACE_DIM;
+                setFlags(FX_SURFACE_DIM, FX_SURFACE_MASK);
             } else {
-                mFlags &= ~FX_SURFACE_DIM;
+                setBufferLayer();
             }
             return this;
+        }
+
+        /**
+         * Indicates whether a 'ContainerLayer' is to be constructed.
+         *
+         * Container layers will not be rendered in any fashion and instead are used
+         * as a parent of renderable layers.
+         *
+         * @param isContainerLayer Whether to create a container layer.
+         * @hide
+         */
+        public Builder setContainerLayer(boolean isContainerLayer) {
+            if (isContainerLayer) {
+                setFlags(FX_SURFACE_CONTAINER, FX_SURFACE_MASK);
+            } else {
+                setBufferLayer();
+            }
+            return this;
+        }
+
+        /**
+         * Indicates whether a buffer layer is to be constructed.
+         * @hide
+         */
+        public Builder setBufferLayer() {
+            return setFlags(FX_SURFACE_NORMAL, FX_SURFACE_MASK);
         }
 
         /**
@@ -536,6 +571,11 @@ public class SurfaceControl implements Parcelable {
          */
         public Builder setFlags(int flags) {
             mFlags = flags;
+            return this;
+        }
+
+        private Builder setFlags(int flags, int mask) {
+            mFlags = (mFlags & ~mask) | flags;
             return this;
         }
     }
@@ -1249,7 +1289,28 @@ public class SurfaceControl implements Parcelable {
         IBinder displayToken = SurfaceControl.getBuiltInDisplay(
                 SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN);
         return nativeScreenshotToBuffer(displayToken, sourceCrop, width, height,
-                minLayer, maxLayer, false, useIdentityTransform, rotation);
+                minLayer, maxLayer, false, useIdentityTransform, rotation,
+                false /* captureSecureLayers */);
+    }
+
+    /**
+     * Like screenshotToBuffer, but if the caller is AID_SYSTEM, allows
+     * for the capture of secure layers. This is used for the screen rotation
+     * animation where the system server takes screenshots but does
+     * not persist them or allow them to leave the server. However in other
+     * cases in the system server, we mostly want to omit secure layers
+     * like when we take a screenshot on behalf of the assistant.
+     *
+     * @hide
+     */
+    public static GraphicBuffer screenshotToBufferWithSecureLayersUnsafe(Rect sourceCrop,
+            int width, int height, int minLayer, int maxLayer, boolean useIdentityTransform,
+            int rotation) {
+        IBinder displayToken = SurfaceControl.getBuiltInDisplay(
+                SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN);
+        return nativeScreenshotToBuffer(displayToken, sourceCrop, width, height,
+                minLayer, maxLayer, false, useIdentityTransform, rotation,
+                true /* captureSecureLayers */);
     }
 
     /**

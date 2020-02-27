@@ -411,6 +411,4 @@ interface IDevicePolicyManager {
     boolean isOverrideApnEnabled(in ComponentName admin);
 
     boolean isMeteredDataDisabledPackageForUser(in ComponentName admin, String packageName, int userId);
-
-    boolean requireSecureKeyguard(int userHandle);
 }

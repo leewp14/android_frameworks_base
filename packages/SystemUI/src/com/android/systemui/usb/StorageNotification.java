@@ -396,7 +396,8 @@ public class StorageNotification extends SystemUI {
                     .setCategory(Notification.CATEGORY_SYSTEM);
             // USB disks notification can be persistent
             if (disk.isUsb()) {
-                builder.setOngoing(true);
+                builder.setOngoing(mContext.getResources().getBoolean(
+                        R.bool.config_persistUsbDriveNotification));
             }
             // Non-adoptable disks can't be snoozed.
             if (disk.isAdoptable()) {

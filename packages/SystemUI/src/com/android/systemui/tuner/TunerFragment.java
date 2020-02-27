@@ -37,7 +37,6 @@ import com.android.systemui.plugins.PluginPrefs;
 public class TunerFragment extends PreferenceFragment {
 
     private static final String TAG = "TunerFragment";
-
     private static final String KEY_BATTERY_PCT = "battery_pct";
     private static final String KEY_PLUGINS = "plugins";
     private static final CharSequence KEY_DOZE = "doze";
@@ -75,27 +74,23 @@ public class TunerFragment extends PreferenceFragment {
         if (!alwaysOnAvailable()) {
             getPreferenceScreen().removePreference(findPreference(KEY_DOZE));
         }
-        if (!Build.IS_DEBUGGABLE) {
+        /*if (!Build.IS_DEBUGGABLE) {
             for (int i = 0; i < DEBUG_ONLY.length; i++) {
                 Preference preference = findPreference(DEBUG_ONLY[i]);
                 if (preference != null) getPreferenceScreen().removePreference(preference);
             }
-        }
+        }*/
 
-        /**
-         * Tuner warnings disabled (used in LineageOS)
         if (Settings.Secure.getInt(getContext().getContentResolver(), SETTING_SEEN_TUNER_WARNING,
                 0) == 0) {
             if (getFragmentManager().findFragmentByTag(WARNING_TAG) == null) {
                 new TunerWarningFragment().show(getFragmentManager(), WARNING_TAG);
             }
         }
-         */
-
     }
 
     private boolean alwaysOnAvailable() {
-        return new AmbientDisplayConfiguration(getContext()).alwaysOnAvailable();
+        return false;
     }
 
     @Override
@@ -115,7 +110,7 @@ public class TunerFragment extends PreferenceFragment {
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        menu.add(Menu.NONE, MENU_REMOVE, Menu.NONE, R.string.remove_from_settings);
+        //menu.add(Menu.NONE, MENU_REMOVE, Menu.NONE, R.string.remove_from_settings);
     }
 
     @Override
@@ -124,7 +119,7 @@ public class TunerFragment extends PreferenceFragment {
             case android.R.id.home:
                 getActivity().finish();
                 return true;
-            case MENU_REMOVE:
+            /*case MENU_REMOVE:
                 TunerService.showResetRequest(getContext(), new Runnable() {
                     @Override
                     public void run() {
@@ -133,7 +128,7 @@ public class TunerFragment extends PreferenceFragment {
                         }
                     }
                 });
-                return true;
+                return true;*/
         }
         return super.onOptionsItemSelected(item);
     }

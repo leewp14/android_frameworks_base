@@ -467,7 +467,7 @@ public class AudioRecord implements AudioRouting
      *                 .setSampleRate(32000)
      *                 .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
      *                 .build())
-     *         .setBufferSize(2*minBuffSize)
+     *         .setBufferSizeInBytes(2*minBuffSize)
      *         .build();
      * </pre>
      * <p>
@@ -979,6 +979,7 @@ public class AudioRecord implements AudioRouting
      */
     public void startRecording()
     throws IllegalStateException {
+        android.util.SeempLog.record(70);
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("startRecording() called on an "
                     + "uninitialized AudioRecord.");
@@ -1002,6 +1003,7 @@ public class AudioRecord implements AudioRouting
      */
     public void startRecording(MediaSyncEvent syncEvent)
     throws IllegalStateException {
+        android.util.SeempLog.record(70);
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("startRecording() called on an "
                     + "uninitialized AudioRecord.");

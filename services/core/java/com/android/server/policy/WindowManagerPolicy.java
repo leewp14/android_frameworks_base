@@ -68,6 +68,7 @@ import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
@@ -579,7 +580,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
 
         public void shutdown(boolean confirm);
         public void reboot(boolean confirm);
-        public void reboot(boolean confirm, String reason);
         public void rebootSafeMode(boolean confirm);
 
         /**
@@ -625,6 +625,8 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * @param listener callback to call when display can be turned off
          */
         void screenTurningOff(ScreenOffListener listener);
+
+        void addSystemUIVisibilityFlag(int flags);
 
         /**
          * Convert the lid state to a human readable format.
@@ -1784,4 +1786,14 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * @return whether the value was changed.
      */
     boolean setAodShowing(boolean aodShowing);
+
+    /**
+     * Send some ActionHandler commands to WindowManager.
+     */
+    public void sendCustomAction(Intent intent);
+
+    /**
+     * Call screen record from WindowManager.
+     */
+    public void screenRecordAction(int mode);
 }

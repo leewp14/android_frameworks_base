@@ -48,6 +48,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.view.WindowManagerPolicyControl;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
@@ -82,6 +83,7 @@ public class ImmersiveModeConfirmation {
     // the lock held.
     boolean mVrModeEnabled = false;
     private int mLockTaskState = LOCK_TASK_MODE_NONE;
+    private boolean mIsDeviceInPocket = false;
 
     public ImmersiveModeConfirmation(Context context) {
         mContext = ActivityThread.currentActivityThread().getSystemUiContext();
@@ -144,7 +146,7 @@ public class ImmersiveModeConfirmation {
             boolean userSetupComplete, boolean navBarEmpty) {
         mHandler.removeMessages(H.SHOW);
         if (isImmersiveMode) {
-            final boolean disabled = PolicyControl.disableImmersiveConfirmation(pkg);
+            final boolean disabled = WindowManagerPolicyControl.disableImmersiveConfirmation(pkg);
             if (DEBUG) Slog.d(TAG, String.format("immersiveModeChanged() disabled=%s mConfirmed=%s",
                     disabled, mConfirmed));
             if (!disabled
@@ -153,7 +155,8 @@ public class ImmersiveModeConfirmation {
                     && !mVrModeEnabled
                     && !navBarEmpty
                     && !UserManager.isDeviceInDemoMode(mContext)
-                    && (mLockTaskState != LOCK_TASK_MODE_LOCKED)) {
+                    && (mLockTaskState != LOCK_TASK_MODE_LOCKED)
+                    && !mIsDeviceInPocket) {
                 mHandler.sendEmptyMessageDelayed(H.SHOW, mShowDelayMs);
             }
         } else {
@@ -409,5 +412,9 @@ public class ImmersiveModeConfirmation {
 
     void onLockTaskModeChangedLw(int lockTaskState) {
         mLockTaskState = lockTaskState;
+    }
+
+    void onDevicePocketStateChanged(boolean onPocket) {
+        mIsDeviceInPocket = onPocket;
     }
 }

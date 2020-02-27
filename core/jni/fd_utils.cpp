@@ -39,7 +39,6 @@ static const char* kPathWhitelist[] = {
   "/dev/socket/webview_zygote",
   "/sys/kernel/debug/tracing/trace_marker",
   "/system/framework/framework-res.apk",
-  "/system/framework/org.lineageos.platform-res.apk",
   "/dev/urandom",
   "/dev/ion",
   "/dev/dri/renderD129", // Fixes b/31172436

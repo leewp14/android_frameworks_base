@@ -48,6 +48,7 @@ import android.content.pm.PermissionInfo;
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -182,6 +183,7 @@ class AlarmManagerService extends SystemService {
     private long mLastTickRemoved;
     int mBroadcastRefCount = 0;
     PowerManager.WakeLock mWakeLock;
+    private QCNsrmAlarmExtension qcNsrmExt = new QCNsrmAlarmExtension(this);
     boolean mLastWakeLockUnimportantForLogging;
     ArrayList<Alarm> mPendingNonWakeupAlarms = new ArrayList<>();
     ArrayList<InFlight> mInFlight = new ArrayList<>();
@@ -1288,9 +1290,13 @@ class AlarmManagerService extends SystemService {
         // because kernel doesn't keep this after reboot
         setTimeZoneImpl(SystemProperties.get(TIMEZONE_PROPERTY));
 
-        // Also sure that we're booting with a halfway sensible current time
         if (mNativeData != 0) {
-            final long systemBuildTime = Environment.getRootDirectory().lastModified();
+            // Ensure that we're booting with a halfway sensible current time.  Use the
+            // most recent of Build.TIME, the root file system's timestamp, and the
+            // value of the ro.build.date.utc system property (which is in seconds).
+            final long systemBuildTime =  Long.max(
+                    1000L * SystemProperties.getLong("ro.build.date.utc", -1L),
+                    Long.max(Environment.getRootDirectory().lastModified(), Build.TIME));
             if (System.currentTimeMillis() < systemBuildTime) {
                 Slog.i(TAG, "Current time only " + System.currentTimeMillis()
                         + ", advancing to build time " + systemBuildTime);
@@ -1852,6 +1858,16 @@ class AlarmManagerService extends SystemService {
                 dumpProto(fd);
             } else {
                 dumpImpl(pw);
+            }
+        }
+
+        @Override
+        /* updates the blocked uids, so if a wake lock is acquired to only fire
+         * alarm for it, it can be released.
+         */
+        public void updateBlockedUids(int uid, boolean isBlocked) {
+            synchronized(mLock) {
+                qcNsrmExt.processBlockedUids(uid, isBlocked, mWakeLock);
             }
         }
 
@@ -3627,11 +3643,10 @@ class AlarmManagerService extends SystemService {
                 mWakeLock.setWorkSource(new WorkSource(uid));
                 return;
             }
+            // Something went wrong; fall back to attributing the lock to the OS
+            mWakeLock.setWorkSource(null);
         } catch (Exception e) {
         }
-
-        // Something went wrong; fall back to attributing the lock to the OS
-        mWakeLock.setWorkSource(null);
     }
 
     private class AlarmHandler extends Handler {
@@ -4072,9 +4087,13 @@ class AlarmManagerService extends SystemService {
             if (DEBUG_WAKELOCK) {
                 Slog.d(TAG, "mBroadcastRefCount -> " + mBroadcastRefCount);
             }
+            qcNsrmExt.removeTriggeredUid(inflight.mUid);
+
             if (mBroadcastRefCount == 0) {
                 mHandler.obtainMessage(AlarmHandler.REPORT_ALARMS_ACTIVE, 0).sendToTarget();
-                mWakeLock.release();
+                if (mWakeLock.isHeld()) {
+                    mWakeLock.release();
+                }
                 if (mInFlight.size() > 0) {
                     mLog.w("Finished all dispatches with " + mInFlight.size()
                             + " remaining inflights");
@@ -4236,7 +4255,9 @@ class AlarmManagerService extends SystemService {
                 setWakelockWorkSource(alarm.operation, alarm.workSource,
                         alarm.type, alarm.statsTag, (alarm.operation == null) ? alarm.uid : -1,
                         true);
+                if (!mWakeLock.isHeld()) {
                 mWakeLock.acquire();
+                }
                 mHandler.obtainMessage(AlarmHandler.REPORT_ALARMS_ACTIVE, 1).sendToTarget();
             }
             final InFlight inflight = new InFlight(AlarmManagerService.this,
@@ -4244,6 +4265,10 @@ class AlarmManagerService extends SystemService {
                     alarm.packageName, alarm.type, alarm.statsTag, nowELAPSED);
             mInFlight.add(inflight);
             mBroadcastRefCount++;
+            qcNsrmExt.addTriggeredUid((alarm.operation != null) ?
+                                    alarm.operation.getCreatorUid() :
+                                    alarm.uid);
+
             if (allowWhileIdle) {
                 // Record the last time this uid handled an ALLOW_WHILE_IDLE alarm.
                 mLastAllowWhileIdleDispatch.put(alarm.creatorUid, nowELAPSED);

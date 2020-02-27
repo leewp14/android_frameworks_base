@@ -396,6 +396,14 @@ public interface WindowManager extends ViewManager {
     final int TAKE_SCREENSHOT_SELECTED_REGION = 2;
 
     /**
+     * Messages for starting a screen record session
+     * @hide
+     */
+    final int SCREEN_RECORD_LOW_QUALITY = 0;
+    final int SCREEN_RECORD_MID_QUALITY = 1;
+    final int SCREEN_RECORD_HIGH_QUALITY = 2;
+
+    /**
      * @hide
      */
     public static final String PARCEL_KEY_SHORTCUTS_ARRAY = "shortcuts_array";
@@ -1706,6 +1714,22 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         public static final int PRIVATE_FLAG_STATUS_BAR_EXPANDED = 0x00800000;
+
+        /**
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_STATUS_HIDE_FORCED = 0x00800000;
+
+        /**
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_NAV_HIDE_FORCED = 0x01000000;
+
+        /**
+         * The window had not set FULLSCREEN flag so don't handle it as fullscreen in layoutWindowLw
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_WAS_NOT_FULLSCREEN = 0x02000000;
 
         /**
          * Control flags that are private to the platform.

@@ -161,7 +161,7 @@
 
     <style name="TextAppearance.StatusBar.Clock" parent="@*android:style/TextAppearance.StatusBar.Icon">
         <item name="android:textSize">@dimen/status_bar_clock_size</item>
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
         <item name="android:textColor">@color/status_bar_clock_color</item>
     </style>
 
@@ -212,6 +212,7 @@
 
     <style name="TextAppearance.QS.DetailHeader">
         <item name="android:textSize">@dimen/qs_detail_header_text_size</item>
+        <item name="android:textColor">?android:attr/colorAccent</item>
         <item name="android:fontFamily">sans-serif-medium</item>
     </style>
 
@@ -221,7 +222,7 @@
 
     <style name="TextAppearance.QS.DetailItemSecondary">
         <item name="android:textSize">@dimen/qs_detail_item_secondary_text_size</item>
-        <item name="android:textColor">?android:attr/colorAccent</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
     </style>
 
     <style name="TextAppearance.QS.Introduction">
@@ -236,10 +237,13 @@
 
     <style name="TextAppearance.QS.DetailButton">
         <item name="android:textSize">@dimen/qs_detail_button_text_size</item>
-        <item name="android:textColor">?android:attr/textColorSecondary</item>
-        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">?android:attr/colorAccent</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:gravity">center</item>
+        <item name="android:paddingTop">@dimen/notification_guts_button_vertical_padding</item>
+        <item name="android:paddingBottom">@dimen/notification_guts_button_vertical_padding</item>
+        <item name="android:paddingLeft">@dimen/notification_guts_button_horizontal_padding</item>
+        <item name="android:paddingRight">@dimen/notification_guts_button_horizontal_padding</item>
     </style>
 
     <style name="TextAppearance.QS.DetailButton.White">
@@ -275,6 +279,16 @@
     </style>
 
     <style name="TextAppearance.QS.TileLabel">
+        <item name="android:textSize">@dimen/qs_tile_text_size</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+    </style>
+
+    <style name="TextAppearance.QS.TileLabel.Secondary">
+        <item name="android:textSize">@dimen/qs_tile_text_size</item>
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+
+    <style name="TextAppearance.QS.Status" parent="@style/TextAppearance.QS.TileLabel.Secondary">
         <item name="android:textSize">@dimen/qs_tile_text_size</item>
         <item name="android:fontFamily">sans-serif</item>
     </style>
@@ -452,23 +466,23 @@
 
     <style name="TextAppearance.NotificationInfo">
         <item name="android:fontFamily">sans-serif</item>
-        <item name="android:textColor">@android:color/black</item>
+        <item name="android:textColor">@*android:color/theme_text1</item>
     </style>
 
     <style name="TextAppearance.NotificationInfo.Primary">
-        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textColor">@*android:color/theme_text1</item>
         <item name="android:textSize">16sp</item>
         <item name="android:alpha">0.87</item>
     </style>
 
     <style name="TextAppearance.NotificationInfo.Confirmation">
-        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textColor">@*android:color/theme_text1</item>
         <item name="android:textSize">14sp</item>
         <item name="android:alpha">0.87</item>
     </style>
 
     <style name="TextAppearance.NotificationInfo.Secondary">
-        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textColor">@*android:color/theme_text2</item>
         <item name="android:textSize">14sp</item>
         <item name="android:alpha">0.54</item>
     </style>
@@ -484,7 +498,7 @@
     <style name="TextAppearance.NotificationInfo.Button">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textSize">14sp</item>
-        <item name="android:textColor">?android:attr/colorAccent</item>
+        <item name="android:textColor">@*android:color/notification_info_button_text</item>
         <item name="android:background">@drawable/btn_borderless_rect</item>
         <item name="android:gravity">center</item>
         <item name="android:focusable">true</item>

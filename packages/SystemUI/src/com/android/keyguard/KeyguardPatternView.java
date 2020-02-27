@@ -151,6 +151,8 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
 
         mLockPatternView.setVisibleDots(mLockPatternUtils.isVisibleDotsEnabled(userId));
         mLockPatternView.setShowErrorPath(mLockPatternUtils.isShowErrorPath(userId));
+        mLockPatternView.setInStealthMode(!mLockPatternUtils.isVisiblePatternEnabled(
+                KeyguardUpdateMonitor.getCurrentUser()));
 
         setFocusableInTouchMode(true);
 
@@ -315,6 +317,7 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
                 boolean isValidPattern) {
             boolean dismissKeyguard = KeyguardUpdateMonitor.getCurrentUser() == userId;
             if (matched) {
+                mLockPatternUtils.sanitizePassword();
                 mCallback.reportUnlockAttempt(userId, true, 0);
                 if (dismissKeyguard) {
                     mLockPatternView.setDisplayMode(LockPatternView.DisplayMode.Correct);

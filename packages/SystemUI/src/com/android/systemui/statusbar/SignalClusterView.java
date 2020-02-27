@@ -115,6 +115,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
     private boolean mBlockEthernet;
     private boolean mActivityEnabled;
     private boolean mForceBlockWifi;
+    private boolean mBlockVpn;
 
     private final IconLogger mIconLogger = Dependency.get(IconLogger.class);
 
@@ -165,10 +166,12 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             return;
         }
         ArraySet<String> blockList = StatusBarIconController.getIconBlacklist(newValue);
+        Log.d(TAG, "onTuningChanged " + blockList);
         boolean blockAirplane = blockList.contains(SLOT_AIRPLANE);
         boolean blockMobile = blockList.contains(SLOT_MOBILE);
         boolean blockWifi = blockList.contains(SLOT_WIFI);
         boolean blockEthernet = blockList.contains(SLOT_ETHERNET);
+        boolean blockVpn = blockList.contains(SLOT_VPN);
 
         if (blockAirplane != mBlockAirplane || blockMobile != mBlockMobile
                 || blockEthernet != mBlockEthernet || blockWifi != mBlockWifi) {
@@ -179,6 +182,11 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             // Re-register to get new callbacks.
             mNetworkController.removeCallback(this);
             mNetworkController.addCallback(this);
+        }
+        if (blockVpn != mBlockVpn) {
+            mBlockVpn = blockVpn;
+            mVpnVisible = mSecurityController.isVpnEnabled() && !mBlockVpn;
+            apply();
         }
     }
 
@@ -219,7 +227,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        mVpnVisible = mSecurityController.isVpnEnabled();
+        mVpnVisible = mSecurityController.isVpnEnabled() && !mBlockVpn;
         mVpnIconId = currentVpnIconId(mSecurityController.isVpnBranded());
 
         for (PhoneState state : mPhoneStates) {
@@ -263,7 +271,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         post(new Runnable() {
             @Override
             public void run() {
-                mVpnVisible = mSecurityController.isVpnEnabled();
+                mVpnVisible = mSecurityController.isVpnEnabled() && !mBlockVpn;
                 mVpnIconId = currentVpnIconId(mSecurityController.isVpnBranded());
                 apply();
             }
@@ -289,7 +297,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
 
     @Override
     public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
-            int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
+            int qsType, boolean activityIn, boolean activityOut, int volteId, String typeContentDescription,
             String description, boolean isWide, int subId, boolean roaming) {
         PhoneState state = getState(subId);
         if (state == null) {
@@ -303,6 +311,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         state.mRoaming = roaming;
         state.mActivityIn = activityIn && mActivityEnabled;
         state.mActivityOut = activityOut && mActivityEnabled;
+        state.mvolteId = volteId;
 
         apply();
     }
@@ -615,7 +624,8 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         public boolean mActivityIn;
         public boolean mActivityOut;
         private SignalDrawable mMobileSignalDrawable;
-
+        private int mvolteId = 0;
+        private ImageView mvolte;
         public PhoneState(int subId, Context context) {
             ViewGroup root = (ViewGroup) LayoutInflater.from(context)
                     .inflate(R.layout.mobile_signal_group, null);
@@ -633,6 +643,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             mMobileActivityOut = root.findViewById(R.id.mobile_out);
             mMobileSignalDrawable = new SignalDrawable(mMobile.getContext());
             mMobile.setImageDrawable(mMobileSignalDrawable);
+            mvolte = (ImageView) root.findViewById(R.id.mobile_volte);
         }
 
         public boolean apply(boolean isSecondaryIcon) {

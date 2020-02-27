@@ -515,7 +515,20 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mFingerprintUnlockController.finishKeyguardFadingAway();
         WindowManagerGlobal.getInstance().trimMemory(
                 ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
+    }
 
+    public void hideNoAnimation() {
+        mShowing = false;
+        mStatusBar.setKeyguardFadingAway(SystemClock.uptimeMillis(), 0, 0);
+        mStatusBar.hideKeyguard();
+        mStatusBar.finishKeyguardFadingAway();
+        mStatusBarWindowManager.setKeyguardShowing(false);
+        mBouncer.hide(true /* destroyView */);
+        mViewMediatorCallback.keyguardGone();
+        mFingerprintUnlockController.finishKeyguardFadingAway();
+        updateStates();
+        WindowManagerGlobal.getInstance().trimMemory(
+                ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN);
     }
 
     private void wakeAndUnlockDejank() {
@@ -598,7 +611,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private Runnable mMakeNavigationBarVisibleRunnable = new Runnable() {
         @Override
         public void run() {
-            mStatusBar.getNavigationBarView().getRootView().setVisibility(View.VISIBLE);
+            mStatusBar.getNavigationBarView().getBaseView().setVisibility(View.VISIBLE);
         }
     };
 
@@ -662,7 +675,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 }
             } else {
                 mContainer.removeCallbacks(mMakeNavigationBarVisibleRunnable);
-                mStatusBar.getNavigationBarView().getRootView().setVisibility(View.GONE);
+                mStatusBar.getNavigationBarView().getBaseView().setVisibility(View.GONE);
             }
         }
     }

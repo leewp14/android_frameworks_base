@@ -3930,6 +3930,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean isSeparateProfileChallengeAllowed(int userHandle) {
+        if (!isCallerWithSystemUid()) {
+            throw new SecurityException("Caller must be system");
+        }
         ComponentName profileOwner = getProfileOwner(userHandle);
         // Profile challenge is supported on N or newer release.
         return profileOwner != null &&
@@ -4795,18 +4798,16 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 quality = PASSWORD_QUALITY_UNSPECIFIED;
             }
             final PasswordMetrics metrics = PasswordMetrics.computeForPassword(password);
-            if (quality != PASSWORD_QUALITY_UNSPECIFIED) {
-                final int realQuality = metrics.quality;
-                if (realQuality < quality
-                        && quality != DevicePolicyManager.PASSWORD_QUALITY_COMPLEX) {
-                    Slog.w(LOG_TAG, "resetPassword: password quality 0x"
-                            + Integer.toHexString(realQuality)
-                            + " does not meet required quality 0x"
-                            + Integer.toHexString(quality));
-                    return false;
-                }
-                quality = Math.max(realQuality, quality);
+            final int realQuality = metrics.quality;
+            if (realQuality < quality
+                    && quality != DevicePolicyManager.PASSWORD_QUALITY_COMPLEX) {
+                Slog.w(LOG_TAG, "resetPassword: password quality 0x"
+                        + Integer.toHexString(realQuality)
+                        + " does not meet required quality 0x"
+                        + Integer.toHexString(quality));
+                return false;
             }
+            quality = Math.max(realQuality, quality);
             int length = getPasswordMinimumLength(null, userHandle, /* parent */ false);
             if (password.length() < length) {
                 Slog.w(LOG_TAG, "resetPassword: password length " + password.length()
@@ -4892,7 +4893,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 result = mLockPatternUtils.setLockCredentialWithToken(password,
                         TextUtils.isEmpty(password) ? LockPatternUtils.CREDENTIAL_TYPE_NONE
                                 : LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
-                                quality, tokenHandle, token, userHandle);
+                        quality, tokenHandle, token, userHandle);
             }
             boolean requireEntry = (flags & DevicePolicyManager.RESET_PASSWORD_REQUIRE_ENTRY) != 0;
             if (requireEntry) {
@@ -6526,24 +6527,20 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
         enforceFullCrossUsersPermission(userHandle);
 
+        // It's not critical here, but let's make sure the package name is correct, in case
+        // we start using it for different purposes.
+        ensureCallerPackage(callerPackage);
+
+        final ApplicationInfo ai;
+        try {
+            ai = mIPackageManager.getApplicationInfo(callerPackage, 0, userHandle);
+        } catch (RemoteException e) {
+            throw new SecurityException(e);
+        }
+
         boolean legacyApp = false;
-        // callerPackage can only be null if we were called from within the system,
-        // which means that we are not a legacy app.
-        if (callerPackage != null) {
-            // It's not critical here, but let's make sure the package name is correct, in case
-            // we start using it for different purposes.
-            ensureCallerPackage(callerPackage);
-
-            final ApplicationInfo ai;
-            try {
-                ai = mIPackageManager.getApplicationInfo(callerPackage, 0, userHandle);
-            } catch (RemoteException e) {
-                throw new SecurityException(e);
-            }
-
-            if (ai.targetSdkVersion <= Build.VERSION_CODES.M) {
-                legacyApp = true;
-            }
+        if (ai.targetSdkVersion <= Build.VERSION_CODES.M) {
+            legacyApp = true;
         }
 
         final int rawStatus = getEncryptionStatus();
@@ -7079,31 +7076,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     who.getPackageName(), userHandle, affectedUserId, which);
         }
     }
-
-    /**
-     * @hide
-     */
-    @Override
-    public boolean requireSecureKeyguard(int userHandle) {
-        if (!mHasFeature) {
-            return false;
-        }
-
-        int passwordQuality = getPasswordQuality(null, userHandle, false);
-        if (passwordQuality > DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED) {
-            return true;
-        }
-
-        int encryptionStatus = getStorageEncryptionStatus(null, userHandle);
-        if (encryptionStatus == DevicePolicyManager.ENCRYPTION_STATUS_ACTIVE
-                || encryptionStatus == DevicePolicyManager.ENCRYPTION_STATUS_ACTIVATING) {
-            return true;
-        }
-
-        final int keyguardDisabledFeatures = getKeyguardDisabledFeatures(null, userHandle, false);
-        return (keyguardDisabledFeatures & DevicePolicyManager.KEYGUARD_DISABLE_TRUST_AGENTS) != 0;
-    }
-
 
     /**
      * Gets the disabled state for features in keyguard for the given admin,

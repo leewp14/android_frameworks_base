@@ -1354,6 +1354,9 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mStopped) {
+                if (mSurfaceHolder != null) {
+                    notifySurfaceDestroyed();
+                }
                 mSurface.release();
             }
         }
@@ -2227,13 +2230,7 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     mIsCreating = false;
                 } else if (hadSurface) {
-                    mSurfaceHolder.ungetCallbacks();
-                    SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
-                    if (callbacks != null) {
-                        for (SurfaceHolder.Callback c : callbacks) {
-                            c.surfaceDestroyed(mSurfaceHolder);
-                        }
-                    }
+                    notifySurfaceDestroyed();
                     mSurfaceHolder.mSurfaceLock.lock();
                     try {
                         mSurfaceHolder.mSurface = new Surface();
@@ -2495,6 +2492,16 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         mIsInTraversal = false;
+    }
+
+    private void notifySurfaceDestroyed() {
+        mSurfaceHolder.ungetCallbacks();
+        SurfaceHolder.Callback[] callbacks = mSurfaceHolder.getCallbacks();
+        if (callbacks != null) {
+            for (SurfaceHolder.Callback c : callbacks) {
+                c.surfaceDestroyed(mSurfaceHolder);
+            }
+        }
     }
 
     private void maybeHandleWindowMove(Rect frame) {
@@ -5101,6 +5108,10 @@ public final class ViewRootImpl implements ViewParent,
         private int processPointerEvent(QueuedInputEvent q) {
             final MotionEvent event = (MotionEvent)q.mEvent;
 
+            if (event.getPointerCount() == 3 && isSwipeToScreenshotGestureActive()) {
+                event.setAction(MotionEvent.ACTION_CANCEL);
+            }
+
             mAttachInfo.mUnbufferedDispatchRequested = false;
             mAttachInfo.mHandlingPointerEvent = true;
             boolean handled = mView.dispatchPointerEvent(event);
@@ -6751,6 +6762,14 @@ public final class ViewRootImpl implements ViewParent,
             mRemoved = true;
             if (mAdded) {
                 dispatchDetachedFromWindow();
+            } else {
+                Log.w(mTag, "add view failed and remove related objects");
+
+                mAccessibilityManager.removeAccessibilityStateChangeListener(
+                        mAccessibilityInteractionConnectionManager);
+                mAccessibilityManager.removeHighTextContrastStateChangeListener(
+                        mHighContrastTextManager);
+                mDisplayManager.unregisterDisplayListener(mDisplayListener);
             }
 
             if (mAdded && !mFirst) {
@@ -8523,6 +8542,14 @@ public final class ViewRootImpl implements ViewParent,
                 // consume anyways so that we don't feed uncaptured key events to other views
                 return true;
             }
+            return false;
+        }
+    }
+
+    private boolean isSwipeToScreenshotGestureActive() {
+        try {
+            return ActivityManager.getService().isSwipeToScreenshotGestureActive();
+        } catch (RemoteException e) {
             return false;
         }
     }

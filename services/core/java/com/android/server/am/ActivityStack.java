@@ -165,6 +165,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import com.android.internal.util.custom.thermal.ThermalController;
+
 /**
  * State and management of a single stack of activities.
  */
@@ -1254,16 +1256,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 + " callers=" + Debug.getCallers(5));
         r.setState(RESUMED, "minimalResumeActivityLocked");
         r.completeResumeLocked();
-        mStackSupervisor.getLaunchTimeTracker().setLaunchTime(r);
         if (DEBUG_SAVED_STATE) Slog.i(TAG_SAVED_STATE,
                 "Launch completed; removing icicle of " + r.icicle);
     }
 
     private void clearLaunchTime(ActivityRecord r) {
         // Make sure that there is no activity waiting for this to launch.
-        if (mStackSupervisor.mWaitingActivityLaunched.isEmpty()) {
-            r.displayStartTime = r.fullyDrawnStartTime = 0;
-        } else {
+        if (!mStackSupervisor.mWaitingActivityLaunched.isEmpty()) {
             mStackSupervisor.removeTimeoutsForActivityLocked(r);
             mStackSupervisor.scheduleIdleTimeoutLocked(r);
         }
@@ -1449,7 +1448,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         prev.getTask().touchActiveTime();
         clearLaunchTime(prev);
 
-        mStackSupervisor.getLaunchTimeTracker().stopFullyDrawnTraceIfNeeded(getWindowingMode());
+        mStackSupervisor.getActivityMetricsLogger().stopFullyDrawnTraceIfNeeded();
 
         mService.updateCpuStats();
 
@@ -1594,7 +1593,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             // It is possible the activity was freezing the screen before it was paused.
             // In that case go ahead and remove the freeze this activity has on the screen
             // since it is no longer visible.
-            if (prev != null) {
+            if (prev != null && prev.mWindowContainerController != null) {
                 prev.stopFreezingScreenLocked(true /*force*/);
             }
             mPausingActivity = null;
@@ -2411,8 +2410,14 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         mStackSupervisor.mGoingToSleepActivities.remove(next);
         next.sleeping = false;
         mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(next);
+        next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
+
+        String nextActivePackageName = next.intent.getComponent().getPackageName();
+        if (prev != next) {
+            ThermalController.sendActivePackageChangedBroadcast(nextActivePackageName, mService.getContext());
+        }
 
         // If we are currently pausing an activity, then don't do anything until that is done.
         if (!mStackSupervisor.allPausedActivitiesComplete()) {
@@ -2497,7 +2502,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
         if (prev != null && prev != next) {
             if (!mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(prev)
-                    && next != null && !next.nowVisible) {
+                    && next != null && !next.nowVisible
+                    && checkKeyguardVisibility(next, true /* shouldBeVisible */,
+                            next.isTopRunningActivity())) {
                 mStackSupervisor.mActivitiesWaitingForVisibleActivity.add(prev);
                 if (DEBUG_SWITCH) Slog.v(TAG_SWITCH,
                         "Resuming top, waiting visible to hide: " + prev);
@@ -3455,6 +3462,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     final void stopActivityLocked(ActivityRecord r) {
         if (DEBUG_SWITCH) Slog.d(TAG_SWITCH, "Stopping: " + r);
+        r.launching = false;
         if ((r.intent.getFlags()&Intent.FLAG_ACTIVITY_NO_HISTORY) != 0
                 || (r.info.flags&ActivityInfo.FLAG_NO_HISTORY) != 0) {
             if (!r.finishing) {

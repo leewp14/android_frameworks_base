@@ -151,8 +151,6 @@ interface IAudioService {
     void setWiredDeviceConnectionState(int type, int state, String address, String name,
             String caller);
 
-    void setHearingAidDeviceConnectionState(in BluetoothDevice device, int state);
-
     int setBluetoothA2dpDeviceConnectionState(in BluetoothDevice device, int state, int profile);
 
     void handleBluetoothA2dpDeviceConfigChange(in BluetoothDevice device);
@@ -210,6 +208,9 @@ interface IAudioService {
 
     oneway void playerHasOpPlayAudio(in int piid, in boolean hasOpPlayAudio);
 
+    int setBluetoothHearingAidDeviceConnectionState(in BluetoothDevice device,
+            int state, boolean suppressNoisyIntent, int musicDevice);
+
     int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(in BluetoothDevice device,
             int state, int profile, boolean suppressNoisyIntent, int a2dpVolume);
 
@@ -224,4 +225,15 @@ interface IAudioService {
 
     // WARNING: read warning at top of file, new methods that need to be used by native
     // code via IAudioManager.h need to be added to the top section.
+
+    /**
+     * Internal SmartNav api to protect Pulse
+     * @hide
+     */
+    void setVisualizerLocked(boolean doLock);
+
+    /**
+     * @hide
+     */
+    boolean isVisualizerLocked(String callingPackage);
 }

@@ -595,7 +595,6 @@ public class AudioService extends IAudioService.Stub
     // Devices for which the volume is fixed and VolumePanel slider should be disabled
     int mFixedVolumeDevices = AudioSystem.DEVICE_OUT_HDMI |
             AudioSystem.DEVICE_OUT_DGTL_DOCK_HEADSET |
-            AudioSystem.DEVICE_OUT_ANLG_DOCK_HEADSET |
             AudioSystem.DEVICE_OUT_HDMI_ARC |
             AudioSystem.DEVICE_OUT_SPDIF |
             AudioSystem.DEVICE_OUT_AUX_LINE;
@@ -627,6 +626,8 @@ public class AudioService extends IAudioService.Stub
     // If absolute volume is supported in AVRCP device
     private boolean mAvrcpAbsVolSupported = false;
 
+    private boolean mLinkNotificationWithVolume;
+    private final boolean mVoiceCapable;
     private static Long mLastDeviceConnectMsgTime = new Long(0);
 
     private NotificationManager mNm;
@@ -702,6 +703,16 @@ public class AudioService extends IAudioService.Stub
                     null /* obj */,  0 /* delay */);
         }
     };
+
+    // only these packages are allowed to override Pulse visualizer lock
+    private static final String[] VISUALIZER_WHITELIST = new String[] {
+            "android",
+            "com.android.systemui",
+            "com.android.keyguard",
+            "com.google.android.googlequicksearchbox"
+    };
+
+    private boolean mVisualizerLocked;
 
     ///////////////////////////////////////////////////////////////////////////
     // Construction
@@ -788,6 +799,9 @@ public class AudioService extends IAudioService.Stub
 
         mForcedUseForComm = AudioSystem.FORCE_NONE;
 
+        mVoiceCapable = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_voice_capable);
+
         createAudioSystemThread();
 
         AudioSystem.setErrorCallback(mAudioSystemCallback);
@@ -810,6 +824,10 @@ public class AudioService extends IAudioService.Stub
         // the mcc is read by onConfigureSafeVolume()
         mSafeMediaVolumeIndex = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_safe_media_volume_index) * 10;
+
+        // read this in before readPersistedSettings() because updateStreamVolumeAlias needs it
+        mLinkNotificationWithVolume = Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.VOLUME_LINK_NOTIFICATION, 1) == 1;
 
         mUseFixedVolume = mContext.getResources().getBoolean(
                 com.android.internal.R.bool.config_useFixedVolume);
@@ -1213,6 +1231,15 @@ public class AudioService extends IAudioService.Stub
         mStreamVolumeAlias[AudioSystem.STREAM_DTMF] = dtmfStreamAlias;
         mStreamVolumeAlias[AudioSystem.STREAM_ACCESSIBILITY] = a11yStreamAlias;
 
+        if (mVoiceCapable) {
+            if (mLinkNotificationWithVolume) {
+                mStreamVolumeAlias[AudioSystem.STREAM_NOTIFICATION] = AudioSystem.STREAM_RING;
+            } else {
+                mStreamVolumeAlias[AudioSystem.STREAM_NOTIFICATION] =
+                        AudioSystem.STREAM_NOTIFICATION;
+            }
+        }
+
         if (updateVolumes && mStreamStates != null) {
             updateDefaultVolumes();
 
@@ -1416,6 +1443,9 @@ public class AudioService extends IAudioService.Stub
             sendEncodedSurroundMode(cr, "readPersistedSettings");
             sendEnabledSurroundFormats(cr, true);
         }
+
+        mLinkNotificationWithVolume = Settings.Secure.getInt(cr,
+                Settings.Secure.VOLUME_LINK_NOTIFICATION, 1) == 1;
 
         mMuteAffectedStreams = System.getIntForUser(cr,
                 System.MUTE_STREAMS_AFFECTED, AudioSystem.DEFAULT_MUTE_STREAMS_AFFECTED,
@@ -4336,6 +4366,27 @@ public class AudioService extends IAudioService.Stub
         return (mMuteAffectedStreams & (1 << streamType)) != 0;
     }
 
+    /** @hide */
+    @Override
+    public boolean isVisualizerLocked(String callingPackage) {
+        boolean isSystem = false;
+        for (int i = 0; i < VISUALIZER_WHITELIST.length; i++) {
+            if (TextUtils.equals(callingPackage, VISUALIZER_WHITELIST[i])) {
+                isSystem = true;
+                break;
+            }
+        }
+        return !isSystem && mVisualizerLocked;
+    }
+
+    /** @hide */
+    @Override
+    public void setVisualizerLocked(boolean doLock) {
+        if (mVisualizerLocked != doLock) {
+            mVisualizerLocked = doLock;
+        }
+    }
+
     private void ensureValidDirection(int direction) {
         switch (direction) {
             case AudioManager.ADJUST_LOWER:
@@ -4626,15 +4677,6 @@ public class AudioService extends IAudioService.Stub
                     new WiredDeviceConnectionState(type, state, address, name, caller),
                     delay);
         }
-    }
-
-    @Override
-    public void setHearingAidDeviceConnectionState(BluetoothDevice device, int state)
-    {
-        Log.i(TAG, "setBluetoothHearingAidDeviceConnectionState");
-
-        setBluetoothHearingAidDeviceConnectionState(
-                device, state,  false /* suppressNoisyIntent */, AudioSystem.DEVICE_NONE);
     }
 
     public int setBluetoothHearingAidDeviceConnectionState(
@@ -5606,7 +5648,11 @@ public class AudioService extends IAudioService.Stub
                     break;
 
                 case MSG_PLAY_SOUND_EFFECT:
-                    onPlaySoundEffect(msg.arg1, msg.arg2);
+                    if (isStreamMute(AudioSystem.STREAM_SYSTEM)) {
+                        Log.d(TAG, "Stream muted, skip playback");
+                    } else {
+                        onPlaySoundEffect(msg.arg1, msg.arg2);
+                    }
                     break;
 
                 case MSG_BTA2DP_DOCK_TIMEOUT:
@@ -5756,6 +5802,8 @@ public class AudioService extends IAudioService.Stub
                 Settings.Global.DOCK_AUDIO_MEDIA_ENABLED), false, this);
             mContentResolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.MASTER_MONO), false, this);
+            mContentResolver.registerContentObserver(Settings.Secure.getUriFor(
+                    Settings.Secure.VOLUME_LINK_NOTIFICATION), false, this);
 
             mEncodedSurroundMode = Settings.Global.getInt(
                     mContentResolver, Settings.Global.ENCODED_SURROUND_OUTPUT,
@@ -5788,6 +5836,14 @@ public class AudioService extends IAudioService.Stub
                 updateMasterMono(mContentResolver);
                 updateEncodedSurroundOutput();
                 sendEnabledSurroundFormats(mContentResolver, mSurroundModeChanged);
+
+                boolean linkNotificationWithVolume = Settings.Secure.getInt(mContentResolver,
+                        Settings.Secure.VOLUME_LINK_NOTIFICATION, 1) == 1;
+                if (linkNotificationWithVolume != mLinkNotificationWithVolume) {
+                    mLinkNotificationWithVolume = linkNotificationWithVolume;
+                    createStreamStates();
+                    updateStreamVolumeAlias(true, TAG);
+                }
             }
         }
 
@@ -5837,6 +5893,7 @@ public class AudioService extends IAudioService.Stub
                                    address));
         sendMsg(mAudioHandler, MSG_ACCESSORY_PLUG_MEDIA_UNMUTE, SENDMSG_QUEUE,
                 AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, 0, null, 0);
+        setCurrentAudioRouteNameIfPossible(name);
     }
 
     private void onSendBecomingNoisyIntent() {
@@ -5856,7 +5913,7 @@ public class AudioService extends IAudioService.Stub
         mConnectedDevices.remove(
                 makeDeviceListKey(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, address));
         // Remove A2DP routes as well
-        setCurrentAudioRouteName(null);
+        setCurrentAudioRouteNameIfPossible(null);
         if (mDockAddress == address) {
             mDockAddress = null;
         }
@@ -5923,6 +5980,10 @@ public class AudioService extends IAudioService.Stub
                                    address));
         sendMsg(mAudioHandler, MSG_ACCESSORY_PLUG_MEDIA_UNMUTE, SENDMSG_QUEUE,
                 AudioSystem.DEVICE_OUT_HEARING_AID, 0, null, 0);
+        sendMsg(mAudioHandler, MSG_SET_DEVICE_VOLUME, SENDMSG_QUEUE,
+                            AudioSystem.DEVICE_OUT_HEARING_AID, 0,
+                            mStreamStates[AudioSystem.STREAM_MUSIC], 0);
+        setCurrentAudioRouteNameIfPossible(name);
     }
 
     // must be called synchronized on mConnectedDevices
@@ -5932,7 +5993,7 @@ public class AudioService extends IAudioService.Stub
         mConnectedDevices.remove(
                 makeDeviceListKey(AudioSystem.DEVICE_OUT_HEARING_AID, address));
         // Remove Hearing Aid routes as well
-        setCurrentAudioRouteName(null);
+        setCurrentAudioRouteNameIfPossible(null);
     }
 
     // must be called synchronized on mConnectedDevices
@@ -5977,7 +6038,6 @@ public class AudioService extends IAudioService.Stub
                 } else {
                     makeA2dpDeviceUnavailableNow(address);
                 }
-                setCurrentAudioRouteName(null);
             } else if (!isConnected && state == BluetoothProfile.STATE_CONNECTED) {
                 if (btDevice.isBluetoothDock()) {
                     // this could be a reconnection after a transient disconnection
@@ -6001,7 +6061,6 @@ public class AudioService extends IAudioService.Stub
                 }
                 makeA2dpDeviceAvailable(address, btDevice.getName(),
                         "onSetA2dpSinkConnectionState");
-                setCurrentAudioRouteName(btDevice.getAliasName());
             }
         }
     }
@@ -6053,23 +6112,33 @@ public class AudioService extends IAudioService.Stub
 
             if (isConnected && state != BluetoothProfile.STATE_CONNECTED) {
                 makeHearingAidDeviceUnavailable(address);
-                setCurrentAudioRouteName(null);
             } else if (!isConnected && state == BluetoothProfile.STATE_CONNECTED) {
                 makeHearingAidDeviceAvailable(address, btDevice.getName(),
                         "onSetHearingAidConnectionState");
-                setCurrentAudioRouteName(btDevice.getAliasName());
             }
         }
     }
 
-    private void setCurrentAudioRouteName(String name){
+    private void setCurrentAudioRouteNameIfPossible(String name) {
         synchronized (mCurAudioRoutes) {
             if (!TextUtils.equals(mCurAudioRoutes.bluetoothName, name)) {
-                mCurAudioRoutes.bluetoothName = name;
-                sendMsg(mAudioHandler, MSG_REPORT_NEW_ROUTES,
-                        SENDMSG_NOOP, 0, 0, null, 0);
+                if (name != null || !isCurrentDeviceConnected()) {
+                    mCurAudioRoutes.bluetoothName = name;
+                    sendMsg(mAudioHandler, MSG_REPORT_NEW_ROUTES,
+                            SENDMSG_NOOP, 0, 0, null, 0);
+                }
             }
         }
+    }
+
+    private boolean isCurrentDeviceConnected() {
+        for (int i = 0; i < mConnectedDevices.size(); i++) {
+            DeviceListSpec deviceSpec = mConnectedDevices.valueAt(i);
+            if (TextUtils.equals(deviceSpec.mDeviceName, mCurAudioRoutes.bluetoothName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void onBluetoothA2dpDeviceConfigChange(BluetoothDevice btDevice)

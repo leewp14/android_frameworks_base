@@ -74,10 +74,10 @@
     <integer translatable="false" name="config_search_panel_view_vibration_duration">20</integer>
 
     <!-- Show mic or phone affordance on Keyguard -->
-    <bool name="config_keyguardShowLeftAffordance">false</bool>
+    <bool name="config_keyguardShowLeftAffordance">true</bool>
 
     <!-- Show camera affordance on Keyguard -->
-    <bool name="config_keyguardShowCameraAffordance">false</bool>
+    <bool name="config_keyguardShowCameraAffordance">true</bool>
 
     <!-- Whether we should use SRC drawing mode when drawing the scrim behind. If this flag is set,
          we change the canvas opacity so libhwui doesn't call glClear on our surface, and then we
@@ -123,7 +123,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,nfc,location,hotspot,inversion,saver,work,cast,night,adb_network,ambient_display,caffeine,heads_up,livedisplay,reading_mode,sync,usb_tether,volume_panel
+        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,aod,ambient_display,nfc,location,hotspot,inversion,saver,work,cast,night,sound,soundsearch,theme,caffeine,reboot,screenshot,screenrecord,smartpixels,heads_up,usb_tether,hwkeys,compass,expanded_desktop
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -161,22 +161,22 @@
     <integer name="touch_acceptance_delay">700</integer>
 
     <!-- The duration in seconds to wait before the dismiss buttons are shown. -->
-    <integer name="recents_task_bar_dismiss_delay_seconds">1000</integer>
+    <integer name="recents_task_bar_dismiss_delay_seconds">1</integer>
 
     <!-- The duration for animating the task decorations in after transitioning from an app. -->
-    <integer name="recents_task_enter_from_app_duration">200</integer>
+    <integer name="recents_task_enter_from_app_duration">100</integer>
 
     <!-- The duration for animating the task decorations in after transitioning from an app. -->
-    <integer name="recents_task_enter_from_affiliated_app_duration">125</integer>
+    <integer name="recents_task_enter_from_affiliated_app_duration">100</integer>
 
     <!-- The duration for animating the task decorations out before transitioning to an app. -->
-    <integer name="recents_task_exit_to_app_duration">125</integer>
+    <integer name="recents_task_exit_to_app_duration">100</integer>
 
     <!-- The min animation duration for animating the nav bar scrim in. -->
-    <integer name="recents_nav_bar_scrim_enter_duration">400</integer>
+    <integer name="recents_nav_bar_scrim_enter_duration">200</integer>
 
     <!-- The animation duration for scrolling the stack to a particular item. -->
-    <integer name="recents_animate_task_stack_scroll_duration">200</integer>
+    <integer name="recents_animate_task_stack_scroll_duration">150</integer>
 
     <!-- The delay to enforce between each alt-tab key press. -->
     <integer name="recents_alt_tab_key_delay">200</integer>
@@ -349,6 +349,7 @@
         <item>com.android.systemui.globalactions.GlobalActionsComponent</item>
         <item>com.android.systemui.ScreenDecorations</item>
         <item>com.android.systemui.fingerprint.FingerprintDialogImpl</item>
+        <item>com.android.systemui.fingerprint.FODCircleViewImpl</item>
         <item>com.android.systemui.SliceBroadcastRelayHandler</item>
     </string-array>
 
@@ -368,16 +369,30 @@
 
     <bool name="quick_settings_show_full_alarm">false</bool>
 
+    <!-- Whether or not beep sound should be when overheat -->
+    <bool name="config_alarmTemperatureBeepSound">false</bool>
+
     <!-- Whether to show a warning notification when the device reaches a certain temperature. -->
     <integer name="config_showTemperatureWarning">0</integer>
+
+    <!-- Whether to show a alarm dialog when device of usb cable reaches a certain temperature. -->
+    <integer name="config_showTemperatureAlarm">0</integer>
 
     <!-- Temp at which to show a warning notification if config_showTemperatureWarning is true.
          If < 0, uses the skin temperature sensor shutdown value from
          HardwarePropertiesManager#getDeviceTemperatures - config_warningTemperatureTolerance. -->
     <integer name="config_warningTemperature">-1</integer>
 
+    <!-- Temp at which to show a alarm dialog if config_showTemperatureAlarm is true.
+         If < 0, uses the skin temperature sensor shutdown value of index[1] from
+         HardwarePropertiesManager#getDeviceTemperatures -->
+    <integer name="config_alarmTemperature">60</integer>
+
     <!-- Fudge factor for how much below the shutdown temp to show the warning. -->
     <integer name="config_warningTemperatureTolerance">2</integer>
+
+    <!-- Fudge factor for how much below the overheat temp to dismiss alarm. -->
+    <integer name="config_alarmTemperatureTolerance">5</integer>
 
     <!-- Accessibility actions -->
     <item type="id" name="action_split_task_to_left" />
@@ -496,4 +511,7 @@
 
     <!-- On debuggable builds, alert the user if SystemUI PSS goes over this number (in kb) -->
     <integer name="watch_heap_limit">256000</integer>
+
+    <!-- Whether to show VoLTE icon in the status bar -->
+    <bool name="config_display_volte">true</bool>
 </resources>

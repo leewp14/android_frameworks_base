@@ -376,7 +376,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      */
     private boolean needUpdateLocked(WallpaperColors colors, int themeMode) {
         if (colors == null) {
-            return false;
+            colors = new WallpaperColors(Color.valueOf(Color.WHITE), null, null, 0);
+            //return false;
         }
 
         if (themeMode == mThemeMode) {
@@ -541,6 +542,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      */
     private void extractColors(WallpaperData wallpaper) {
         String cropFile = null;
+        boolean defaultImageWallpaper = false;
         int wallpaperId;
 
         synchronized (mLock) {
@@ -549,6 +551,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     || wallpaper.wallpaperComponent == null;
             if (imageWallpaper && wallpaper.cropFile != null && wallpaper.cropFile.exists()) {
                 cropFile = wallpaper.cropFile.getAbsolutePath();
+            } else if (imageWallpaper && !wallpaper.cropExists() && !wallpaper.sourceExists()) {
+                defaultImageWallpaper = true;
             }
             wallpaperId = wallpaper.wallpaperId;
         }
@@ -559,6 +563,25 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             if (bitmap != null) {
                 colors = WallpaperColors.fromBitmap(bitmap);
                 bitmap.recycle();
+            }
+        } else if (defaultImageWallpaper) {
+            // There is no crop and source file because this is default image wallpaper.
+            try (final InputStream is =
+                         WallpaperManager.openDefaultWallpaper(mContext, FLAG_SYSTEM)) {
+                if (is != null) {
+                    try {
+                        final BitmapFactory.Options options = new BitmapFactory.Options();
+                        final Bitmap bitmap = BitmapFactory.decodeStream(is, null, options);
+                        if (bitmap != null) {
+                            colors = WallpaperColors.fromBitmap(bitmap);
+                            bitmap.recycle();
+                        }
+                    } catch (OutOfMemoryError e) {
+                        Slog.w(TAG, "Can't decode default wallpaper stream", e);
+                    }
+                }
+            } catch (IOException e) {
+                Slog.w(TAG, "Can't close default wallpaper stream", e);
             }
         }
 
@@ -589,8 +612,9 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      */
     private WallpaperColors getThemeColorsLocked(WallpaperColors colors) {
         if (colors == null) {
-            Slog.w(TAG, "Cannot get theme colors because WallpaperColors is null.");
-            return null;
+            colors = new WallpaperColors(Color.valueOf(Color.WHITE), null, null, 0);
+            //Slog.w(TAG, "Cannot get theme colors because WallpaperColors is null.");
+            //return null;
         }
 
         int colorHints = colors.getColorHints();

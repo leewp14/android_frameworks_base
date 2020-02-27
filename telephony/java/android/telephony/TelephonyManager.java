@@ -1,4 +1,7 @@
 /*
+ * Copyright (c) 2014, The Linux Foundation. All rights reserved.
+ * Not a Contribution.
+ *
  * Copyright (C) 2008 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +33,7 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.WorkerThread;
 import android.app.ActivityThread;
+import android.app.AppOpsManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -80,6 +84,9 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import android.content.ContentResolver;
+import android.provider.Settings;
 
 /**
  * Provides access to information about the telephony services on
@@ -1262,6 +1269,7 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getDeviceId(int slotIndex) {
         // FIXME this assumes phoneId == slotIndex
+        android.util.SeempLog.record_str(8, ""+slotIndex);
         try {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null)
@@ -1406,6 +1414,7 @@ public class TelephonyManager {
             android.Manifest.permission.ACCESS_FINE_LOCATION
     })
     public CellLocation getCellLocation() {
+        android.util.SeempLog.record(49);
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null) {
@@ -1495,6 +1504,7 @@ public class TelephonyManager {
     @Deprecated
     @RequiresPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
     public List<NeighboringCellInfo> getNeighboringCellInfo() {
+        android.util.SeempLog.record(50);
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null)
@@ -2728,6 +2738,7 @@ public class TelephonyManager {
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getSimSerialNumber(int subId) {
+        android.util.SeempLog.record_str(388, ""+subId);
         try {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null)
@@ -2874,6 +2885,7 @@ public class TelephonyManager {
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getSubscriberId(int subId) {
+        android.util.SeempLog.record_str(389, ""+subId);
         try {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null)
@@ -3103,6 +3115,7 @@ public class TelephonyManager {
             android.Manifest.permission.READ_PHONE_NUMBERS
     })
     public String getLine1Number(int subId) {
+        android.util.SeempLog.record_str(9, ""+subId);
         String number = null;
         try {
             ITelephony telephony = getITelephony();
@@ -4444,6 +4457,16 @@ public class TelephonyManager {
     }
 
     /**
+     * @hide
+     */
+    public void toggle2G(boolean twoGees) {
+        try {
+            getITelephony().toggle2G(twoGees);
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
      * Returns the MMS user agent.
      */
     public String getMmsUserAgent() {
@@ -4974,7 +4997,7 @@ public class TelephonyManager {
         if (value == null) {
             value = "";
         }
-
+        value.replace(',', ' ');
         if (prop != null) {
             p = prop.split(",");
         }
@@ -5000,7 +5023,13 @@ public class TelephonyManager {
             }
         }
 
-        if (propVal.length() > SystemProperties.PROP_VALUE_MAX) {
+        int propValLen = propVal.length();
+        try {
+            propValLen = propVal.getBytes("utf-8").length;
+        } catch (java.io.UnsupportedEncodingException e) {
+            Rlog.d(TAG, "setTelephonyProperty: utf-8 not supported");
+        }
+        if (propValLen > SystemProperties.PROP_VALUE_MAX) {
             Rlog.d(TAG, "setTelephonyProperty: property too long phoneId=" + phoneId +
                     " property=" + property + " value: " + value + " propVal=" + propVal);
             return;
@@ -5146,7 +5175,7 @@ public class TelephonyManager {
         // FIXME Need to get it from Telephony Dev Controller when that gets implemented!
         // and then this method shouldn't be used at all!
         if(isMultiSimEnabled()) {
-            return 2;
+            return getPhoneCount();
         } else {
             return 1;
         }
@@ -6436,6 +6465,14 @@ public class TelephonyManager {
     public void setDataEnabled(int subId, boolean enable) {
         try {
             Log.d(TAG, "setDataEnabled: enabled=" + enable);
+            AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
+            if (enable) {
+                if (appOps.noteOp(AppOpsManager.OP_DATA_CONNECT_CHANGE)
+                        != AppOpsManager.MODE_ALLOWED) {
+                    Log.w(TAG, "Permission denied by user.");
+                    return;
+                }
+            }
             ITelephony telephony = getITelephony();
             if (telephony != null)
                 telephony.setUserDataEnabled(subId, enable);
@@ -6626,6 +6663,45 @@ public class TelephonyManager {
             Log.e(TAG, "Permission error calling ITelephony#isHearingAidCompatibilitySupported", e);
         }
         return false;
+    }
+
+    /**
+     * This function retrieves value for setting "name+subId", and if that is not found
+     * retrieves value for setting "name", and if that is not found throws
+     * SettingNotFoundException
+     *
+     * @hide
+     */
+    public static int getIntWithSubId(ContentResolver cr, String name, int subId)
+            throws SettingNotFoundException {
+        try {
+            return Settings.Global.getInt(cr, name + subId);
+        } catch (SettingNotFoundException e) {
+            try {
+                int val = Settings.Global.getInt(cr, name);
+                Settings.Global.putInt(cr, name + subId, val);
+
+                /* We are now moving from 'setting' to 'setting+subId', and using the value stored
+                 * for 'setting' as default. Reset the default (since it may have a user set
+                 * value). */
+                int default_val = val;
+                if (name.equals(Settings.Global.MOBILE_DATA)) {
+                    default_val = "true".equalsIgnoreCase(
+                            SystemProperties.get("ro.com.android.mobiledata", "true")) ? 1 : 0;
+                } else if (name.equals(Settings.Global.DATA_ROAMING)) {
+                    default_val = "true".equalsIgnoreCase(
+                            SystemProperties.get("ro.com.android.dataroaming", "false")) ? 1 : 0;
+                }
+
+                if (default_val != val) {
+                    Settings.Global.putInt(cr, name, default_val);
+                }
+
+                return val;
+            } catch (SettingNotFoundException exc) {
+                throw new SettingNotFoundException(name);
+            }
+        }
     }
 
     /**
@@ -7581,6 +7657,9 @@ public class TelephonyManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public int setAllowedCarriers(int slotIndex, List<CarrierIdentifier> carriers) {
+        if (!SubscriptionManager.isValidPhoneId(slotIndex)) {
+            return -1;
+        }
         try {
             ITelephony service = getITelephony();
             if (service != null) {
@@ -7608,15 +7687,17 @@ public class TelephonyManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public List<CarrierIdentifier> getAllowedCarriers(int slotIndex) {
-        try {
-            ITelephony service = getITelephony();
-            if (service != null) {
-                return service.getAllowedCarriers(slotIndex);
+        if (SubscriptionManager.isValidPhoneId(slotIndex)) {
+            try {
+                ITelephony service = getITelephony();
+                if (service != null) {
+                    return service.getAllowedCarriers(slotIndex);
+                }
+            } catch (RemoteException e) {
+                Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
+            } catch (NullPointerException e) {
+                Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
-        } catch (NullPointerException e) {
-            Log.e(TAG, "Error calling ITelephony#getAllowedCarriers", e);
         }
         return new ArrayList<CarrierIdentifier>(0);
     }
@@ -7673,6 +7754,23 @@ public class TelephonyManager {
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#carrierActionReportDefaultNetworkStatus", e);
+        }
+    }
+
+    /**
+     * Action set from carrier signalling broadcast receivers to reset all carrier actions
+     * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
+     * @param subId the subscription ID that this action applies to.
+     * @hide
+     */
+    public void carrierActionResetAll(int subId) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                service.carrierActionResetAll(subId);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#carrierActionResetAll", e);
         }
     }
 

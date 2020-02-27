@@ -45,6 +45,8 @@ import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -58,11 +60,14 @@ public class NavigationBarInflaterView extends FrameLayout
     public static final String NAV_BAR_VIEWS = "sysui_nav_bar";
     public static final String NAV_BAR_LEFT = "sysui_nav_bar_left";
     public static final String NAV_BAR_RIGHT = "sysui_nav_bar_right";
+    public static final String NAV_BAR_INVERSE = "sysui_nav_bar_inverse";
 
     public static final String MENU_IME_ROTATE = "menu_ime";
+    public static final String MENU_IME_ALWAYS_SHOW = "menu_ime_always_show";
     public static final String BACK = "back";
     public static final String HOME = "home";
     public static final String RECENT = "recent";
+    public static final String SEARCH = "search";
     public static final String NAVSPACE = "space";
     public static final String CLIPBOARD = "clipboard";
     public static final String KEY = "key";
@@ -79,8 +84,8 @@ public class NavigationBarInflaterView extends FrameLayout
     public static final String KEY_CODE_START = "(";
     public static final String KEY_IMAGE_DELIM = ":";
     public static final String KEY_CODE_END = ")";
-    private static final String WEIGHT_SUFFIX = "W";
-    private static final String WEIGHT_CENTERED_SUFFIX = "WC";
+    public static final String WEIGHT_SUFFIX = "W";
+    public static final String WEIGHT_CENTERED_SUFFIX = "WC";
 
     private final List<NavBarButtonProvider> mPlugins = new ArrayList<>();
     private final Display mDisplay;
@@ -102,6 +107,8 @@ public class NavigationBarInflaterView extends FrameLayout
     private boolean mUsingCustomLayout;
 
     private OverviewProxyService mOverviewProxyService;
+
+    private boolean mInverseLayout;
 
     public NavigationBarInflaterView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -152,7 +159,7 @@ public class NavigationBarInflaterView extends FrameLayout
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         Dependency.get(TunerService.class).addTunable(this, NAV_BAR_VIEWS, NAV_BAR_LEFT,
-                NAV_BAR_RIGHT);
+                NAV_BAR_RIGHT, NAV_BAR_INVERSE);
         Dependency.get(PluginManager.class).addPluginListener(this,
                 NavBarButtonProvider.class, true /* Allow multiple */);
     }
@@ -173,6 +180,10 @@ public class NavigationBarInflaterView extends FrameLayout
                 inflateLayout(newValue);
             }
         } else if (NAV_BAR_LEFT.equals(key) || NAV_BAR_RIGHT.equals(key)) {
+            clearViews();
+            inflateLayout(mCurrentLayout);
+        } else if (NAV_BAR_INVERSE.equals(key)) {
+            mInverseLayout = newValue != null && Integer.parseInt(newValue) != 0;
             clearViews();
             inflateLayout(mCurrentLayout);
         }
@@ -251,6 +262,17 @@ public class NavigationBarInflaterView extends FrameLayout
         }
     }
 
+    private String[] swapLeftAndRight(String[] set) {
+        for (int i = 0; i < set.length; i++) {
+            if (set.equals(LEFT)) {
+                set[i] = RIGHT;
+            } else if (set[i].equals(RIGHT)) {
+                set[i] = LEFT;
+            }
+        }
+        return set;
+    }
+
     protected void inflateLayout(String newLayout) {
         mCurrentLayout = newLayout;
         if (newLayout == null) {
@@ -265,6 +287,18 @@ public class NavigationBarInflaterView extends FrameLayout
         String[] start = sets[0].split(BUTTON_SEPARATOR);
         String[] center = sets[1].split(BUTTON_SEPARATOR);
         String[] end = sets[2].split(BUTTON_SEPARATOR);
+        // Invert start, center and end if needed.
+        if (mInverseLayout) {
+            List<String> newStart = Arrays.asList(end);
+            List<String> newCenter = Arrays.asList(center);
+            List<String> newEnd = Arrays.asList(start);
+            Collections.reverse(newStart);
+            Collections.reverse(newCenter);
+            Collections.reverse(newEnd);
+            start = swapLeftAndRight((String[]) newStart.toArray());
+            center = swapLeftAndRight((String[]) newCenter.toArray());
+            end = swapLeftAndRight((String[]) newEnd.toArray());
+        }
         // Inflate these in start to end order or accessibility traversal will be messed up.
         inflateButtons(start, mRot0.findViewById(R.id.ends_group), isRot0Landscape, true);
         inflateButtons(start, mRot90.findViewById(R.id.ends_group), !isRot0Landscape, true);
@@ -387,6 +421,10 @@ public class NavigationBarInflaterView extends FrameLayout
             v = inflater.inflate(R.layout.recent_apps, parent, false);
         } else if (MENU_IME_ROTATE.equals(button)) {
             v = inflater.inflate(R.layout.menu_ime, parent, false);
+        } else if (MENU_IME_ALWAYS_SHOW.equals(button)) {
+            v = inflater.inflate(R.layout.menu_ime_always_show, parent, false);
+        } else if (SEARCH.equals(button)) {
+            v = inflater.inflate(R.layout.search, parent, false);
         } else if (NAVSPACE.equals(button)) {
             v = inflater.inflate(R.layout.nav_key_space, parent, false);
         } else if (CLIPBOARD.equals(button)) {
@@ -475,9 +513,7 @@ public class NavigationBarInflaterView extends FrameLayout
 
     private void clearAllChildren(ViewGroup group) {
         for (int i = 0; i < group.getChildCount(); i++) {
-            if (group.getChildAt(i).getId() != R.id.dpad_group) {
-                ((ViewGroup) group.getChildAt(i)).removeAllViews();
-            }
+            ((ViewGroup) group.getChildAt(i)).removeAllViews();
         }
     }
 

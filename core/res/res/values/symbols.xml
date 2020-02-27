@@ -1823,9 +1823,12 @@
   <java-symbol type="array" name="config_autoBrightnessKeyboardBacklightValues" />
   <java-symbol type="array" name="config_autoBrightnessLcdBacklightValues" />
   <java-symbol type="array" name="config_autoBrightnessLevels" />
-  <java-symbol type="array" name="config_dynamicHysteresisBrightLevels" />
-  <java-symbol type="array" name="config_dynamicHysteresisDarkLevels" />
-  <java-symbol type="array" name="config_dynamicHysteresisLuxLevels" />
+  <java-symbol type="array" name="config_ambientThresholdLevels" />
+  <java-symbol type="array" name="config_ambientBrighteningThresholds" />
+  <java-symbol type="array" name="config_ambientDarkeningThresholds" />
+  <java-symbol type="array" name="config_screenThresholdLevels" />
+  <java-symbol type="array" name="config_screenBrighteningThresholds" />
+  <java-symbol type="array" name="config_screenDarkeningThresholds" />
   <java-symbol type="array" name="config_minimumBrightnessCurveLux" />
   <java-symbol type="array" name="config_minimumBrightnessCurveNits" />
   <java-symbol type="array" name="config_protectedNetworks" />
@@ -2022,6 +2025,7 @@
   <java-symbol type="string" name="config_geocoderProviderPackageName" />
   <java-symbol type="string" name="config_geofenceProviderPackageName" />
   <java-symbol type="string" name="config_networkLocationProviderPackageName" />
+  <java-symbol type="string" name="config_comboNetworkLocationProvider" />
   <java-symbol type="string" name="config_wimaxManagerClassname" />
   <java-symbol type="string" name="config_wimaxNativeLibLocation" />
   <java-symbol type="string" name="config_wimaxServiceClassname" />
@@ -2135,6 +2139,7 @@
   <java-symbol type="string" name="config_carrierAppInstallDialogComponent" />
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
+  <java-symbol type="string" name="config_optionalPackageVerifierName" />
 
   <java-symbol type="layout" name="resolver_list" />
   <java-symbol type="id" name="resolver_list" />
@@ -2989,7 +2994,7 @@
   <!-- Global actions icons -->
   <java-symbol type="drawable" name="ic_restart" />
   <java-symbol type="drawable" name="ic_screenshot" />
-
+  <java-symbol type="drawable" name="ic_faster_emergency" />
   <java-symbol type="drawable" name="emergency_icon" />
 
   <java-symbol type="array" name="config_convert_to_emergency_number_map" />
@@ -3415,4 +3420,13 @@
 
   <java-symbol type="string" name="config_misprovisionedDeviceModel" />
   <java-symbol type="string" name="config_misprovisionedBrandValue" />
+ 
+  <java-symbol type="string" name="config_defaultAssistantComponentName" />
+
+  <java-symbol type="integer" name="config_sms_authorization_timeout_ms" />
+  <java-symbol type="bool" name="config_sms_authorization_enabled" />
+
+  <java-symbol type="integer" name="db_wal_truncate_size" />
+
+  <java-symbol type="string" name="config_defaultAssistantComponentName" />
 </resources>

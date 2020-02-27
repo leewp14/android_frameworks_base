@@ -22,6 +22,8 @@ import android.app.ActivityThread;
 import android.app.StatusBarManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.hardware.biometrics.IBiometricPromptReceiver;
 import android.os.Binder;
@@ -385,13 +387,13 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
         }
 
         @Override
-        public boolean showShutdownUi(boolean isReboot, String reason, boolean rebootCustom) {
+        public boolean showShutdownUi(boolean isReboot, String reason) {
             if (!mContext.getResources().getBoolean(R.bool.config_showSysuiShutdown)) {
                 return false;
             }
             if (mBar != null) {
                 try {
-                    mBar.showShutdownUi(isReboot, reason, rebootCustom);
+                    mBar.showShutdownUi(isReboot, reason);
                     return true;
                 } catch (RemoteException ex) {}
             }
@@ -470,12 +472,150 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     }
 
     @Override
+    public void toggleSettingsPanel() {
+        enforceExpandStatusBar();
+
+        if (mBar != null) {
+            try {
+                mBar.toggleSettingsPanel();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
     public void expandSettingsPanel(String subPanel) {
         enforceExpandStatusBar();
 
         if (mBar != null) {
             try {
                 mBar.animateExpandSettingsPanel(subPanel);
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void toggleRecentApps() {
+        enforceStatusBarService();
+
+        if (mBar != null) {
+            try {
+                mBar.toggleRecentApps();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void toggleSplitScreen() {
+        enforceStatusBarService();
+
+        if (mBar != null) {
+            try {
+                mBar.toggleSplitScreen();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void preloadRecentApps() {
+        enforceStatusBarService();
+
+        if (mBar != null) {
+            try {
+                mBar.preloadRecentApps();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void cancelPreloadRecentApps() {
+        enforceStatusBarService();
+
+        if (mBar != null) {
+            try {
+                mBar.cancelPreloadRecentApps();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void startAssist(Bundle args) {
+        enforceStatusBarService();
+
+        if (mBar != null) {
+            try {
+                mBar.startAssist(args);
+            } catch (RemoteException e) {
+            }
+        }
+    }
+
+    /**
+     * Let systemui know screen pinning state change. This is independent of the
+     * showScreenPinningRequest() call as it does not reflect state
+     *
+     * @hide
+     */
+    @Override
+    public void screenPinningStateChanged(boolean enabled) {
+        enforceStatusBar();
+        if (mBar != null) {
+            try {
+                mBar.screenPinningStateChanged(enabled);
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    /**
+     * Window manager notifies SystemUI of navigation bar "left in landscape" changes
+     *
+     * @hide
+     */
+    @Override
+    public void leftInLandscapeChanged(boolean isLeft) {
+        enforceStatusBar();
+        if (mBar != null) {
+            try {
+                mBar.leftInLandscapeChanged(isLeft);
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void toggleFlashlight() {
+        enforceStatusBarService();
+        if (mBar != null) {
+            try {
+                mBar.toggleFlashlight();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void toggleNavigationEditor() {
+        enforceNavigationEditor();
+        if (mBar != null) {
+            try {
+                mBar.toggleNavigationEditor();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void dispatchNavigationEditorResults(Intent intent) {
+        enforceNavigationEditor();
+        if (mBar != null) {
+            try {
+                mBar.dispatchNavigationEditorResults(intent);
             } catch (RemoteException ex) {
             }
         }
@@ -592,6 +732,38 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
             try {
                 mBar.hideFingerprintDialog();
             } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void toggleCameraFlash() {
+        if (mBar != null) {
+            try {
+                mBar.toggleCameraFlash();
+            } catch (RemoteException ex) {
+            }
+        }
+    }
+
+    @Override
+    public void showInDisplayFingerprintView() {
+        if (mBar != null) {
+            try {
+                mBar.showInDisplayFingerprintView();
+            } catch (RemoteException ex) {
+                // do nothing
+            }
+        }
+    }
+
+    @Override
+    public void hideInDisplayFingerprintView() {
+        if (mBar != null) {
+            try {
+                mBar.hideInDisplayFingerprintView();
+            } catch (RemoteException ex) {
+                // do nothing
             }
         }
     }
@@ -848,6 +1020,11 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
                 "StatusBarManagerService");
     }
 
+    private void enforceNavigationEditor() {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.NAVIGATION_EDITOR,
+                "StatusBarManagerService");
+    }
+
     // ================================================================================
     // Callbacks from the status bar service.
     // ================================================================================
@@ -957,7 +1134,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
      * Allows the status bar to reboot the device.
      */
     @Override
-    public void reboot(boolean safeMode, String reason) {
+    public void reboot(boolean safeMode) {
         enforceStatusBarService();
         long identity = Binder.clearCallingIdentity();
         try {
@@ -966,8 +1143,27 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
                 if (safeMode) {
                     ShutdownThread.rebootSafeMode(getUiContext(), true);
                 } else {
-                    ShutdownThread.rebootCustom(getUiContext(), reason, false);
+                    ShutdownThread.reboot(getUiContext(),
+                            PowerManager.SHUTDOWN_USER_REQUESTED, false);
                 }
+            });
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Allows the status bar to reboot the device to recovery or bootloader.
+     */
+    @Override
+    public void advancedReboot(String mode) {
+        enforceStatusBarService();
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mHandler.post(() -> {
+                // ShutdownThread displays UI, so give it a UI context.
+                    ShutdownThread.reboot(getUiContext(),
+                            mode, false/*don't ask for confirmation*/);
             });
         } finally {
             Binder.restoreCallingIdentity(identity);

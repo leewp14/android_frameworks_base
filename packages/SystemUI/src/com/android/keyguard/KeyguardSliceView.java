@@ -23,16 +23,20 @@ import android.annotation.ColorInt;
 import android.app.PendingIntent;
 import android.arch.lifecycle.LiveData;
 import android.arch.lifecycle.Observer;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.Layout;
 import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Animation;
@@ -84,6 +88,11 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
 
     private LiveData<Slice> mLiveData;
     private int mIconSize;
+    private int mWeatherIconSize;
+
+    private boolean mShowInfo;
+    private boolean mRowAvailable;
+
     /**
      * Runnable called whenever the view contents change.
      */
@@ -127,6 +136,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         mTitle = findViewById(R.id.title);
         mRow = findViewById(R.id.row);
         mTextColor = Utils.getColorAttr(mContext, R.attr.wallpaperTextColor);
+        updateSettings();
     }
 
     @Override
@@ -146,6 +156,11 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         Dependency.get(ConfigurationController.class).removeCallback(this);
     }
 
+    public void updateSettings() {
+        mShowInfo = Settings.System.getIntForUser(getContext().getContentResolver(),
+                Settings.System.LOCKSCREEN_INFO, 1, UserHandle.USER_CURRENT) == 1;
+    }
+
     private void showSlice() {
         if (mPulsing || mSlice == null) {
             mTitle.setVisibility(GONE);
@@ -155,6 +170,10 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             }
             return;
         }
+
+        final ContentResolver resolver = mContext.getContentResolver();
+        boolean mClockSelection = Settings.System.getIntForUser(resolver,
+                Settings.System.LOCKSCREEN_CLOCK_SELECTION, 0, UserHandle.USER_CURRENT) == 15;
 
         ListContent lc = new ListContent(getContext(), mSlice);
         mHasHeader = lc.hasHeader();
@@ -167,6 +186,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
                 subItems.add(subItem);
             }
         }
+
         if (!mHasHeader) {
             mTitle.setVisibility(GONE);
         } else {
@@ -184,19 +204,33 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         final int subItemsCount = subItems.size();
         final int blendedColor = getTextColor();
         final int startIndex = mHasHeader ? 1 : 0; // First item is header; skip it
-        mRow.setVisibility(subItemsCount > 0 ? VISIBLE : GONE);
+        if (mClockSelection) {
+            mRow.setPaddingRelative((int) mContext.getResources().getDimension(R.dimen.custom_clock_left_padding), 0, 0, 0);
+            mRow.setGravity(Gravity.START);
+        }
+        else {
+            mRow.setPaddingRelative(0, 0, 0, 0);
+            mRow.setGravity(Gravity.CENTER);
+        }
+        mRow.setVisibility(subItemsCount > 0 ? ((mShowInfo || mDarkAmount == 1) ? VISIBLE : GONE)
+                : GONE);
+        mRowAvailable = subItemsCount > 0;
         for (int i = startIndex; i < subItemsCount; i++) {
             SliceItem item = subItems.get(i);
             RowContent rc = new RowContent(getContext(), item, true /* showStartItem */);
             final Uri itemTag = item.getSlice().getUri();
+            final boolean isWeatherSlice = itemTag.toString().equals(KeyguardSliceProvider.KEYGUARD_WEATHER_URI);
             // Try to reuse the view if already exists in the layout
             KeyguardSliceButton button = mRow.findViewWithTag(itemTag);
             if (button == null) {
                 button = new KeyguardSliceButton(mContext);
+                button.setShouldTintDrawable(!isWeatherSlice);
                 button.setTextColor(blendedColor);
                 button.setTag(itemTag);
                 final int viewIndex = i - (mHasHeader ? 1 : 0);
                 mRow.addView(button, viewIndex);
+            }else{
+                button.setShouldTintDrawable(!isWeatherSlice);
             }
 
             PendingIntent pendingIntent = null;
@@ -215,8 +249,8 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             if (icon != null) {
                 iconDrawable = icon.getIcon().loadDrawable(mContext);
                 final int width = (int) (iconDrawable.getIntrinsicWidth()
-                        / (float) iconDrawable.getIntrinsicHeight() * mIconSize);
-                iconDrawable.setBounds(0, 0, Math.max(width, 1), mIconSize);
+                        / (float) iconDrawable.getIntrinsicHeight() * (isWeatherSlice ? mWeatherIconSize : mIconSize));
+                iconDrawable.setBounds(0, 0, Math.max(width, 1), (isWeatherSlice ? mWeatherIconSize : mIconSize));
             }
             button.setCompoundDrawables(iconDrawable, null, null, null);
             button.setOnClickListener(this);
@@ -293,6 +327,18 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         mDarkAmount = darkAmount;
         mRow.setDarkAmount(darkAmount);
         updateTextColors();
+        mRow.setVisibility(mRowAvailable ? ((mShowInfo || mDarkAmount == 1) ? VISIBLE : GONE)
+                : GONE);
+    }
+
+    public void setViewsTypeface(Typeface tf) {
+        int childCount = mRow.getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            View v = mRow.getChildAt(i);
+            if (v instanceof Button) {
+                ((Button) v).setTypeface(tf);
+            }
+        }
     }
 
     private void updateTextColors() {
@@ -379,6 +425,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     @Override
     public void onDensityOrFontScaleChanged() {
         mIconSize = mContext.getResources().getDimensionPixelSize(R.dimen.widget_icon_size);
+        mWeatherIconSize = mContext.getResources().getDimensionPixelSize(R.dimen.weather_icon_size);
     }
 
     public void refresh() {
@@ -480,11 +527,16 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     static class KeyguardSliceButton extends Button implements
             ConfigurationController.ConfigurationListener {
 
+        private boolean shouldTintDrawable = true;
         public KeyguardSliceButton(Context context) {
             super(context, null /* attrs */, 0 /* styleAttr */,
                     com.android.keyguard.R.style.TextAppearance_Keyguard_Secondary);
             onDensityOrFontScaleChanged();
             setEllipsize(TruncateAt.END);
+        }
+
+        public void setShouldTintDrawable(boolean shouldTintDrawable){
+            this.shouldTintDrawable = shouldTintDrawable;
         }
 
         @Override
@@ -534,6 +586,9 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         }
 
         private void updateDrawableColors() {
+            if (!shouldTintDrawable){
+                return;
+            }
             final int color = getCurrentTextColor();
             for (Drawable drawable : getCompoundDrawables()) {
                 if (drawable != null) {

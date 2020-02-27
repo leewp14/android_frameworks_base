@@ -47,6 +47,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import android.os.SystemProperties;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IAppOpsCallback;
@@ -586,8 +587,21 @@ public class Camera {
             mEventHandler = null;
         }
 
-        return native_setup(new WeakReference<Camera>(this), cameraId, halVersion,
-                ActivityThread.currentOpPackageName());
+        String packageName = ActivityThread.currentOpPackageName();
+
+        //Force HAL1 if the package name falls in this bucket
+        String packageList = SystemProperties.get("camera.hal1.packagelist", "");
+        if (packageList.length() > 0) {
+            TextUtils.StringSplitter splitter = new TextUtils.SimpleStringSplitter(',');
+            splitter.setString(packageList);
+            for (String str : splitter) {
+                if (packageName.equals(str)) {
+                    halVersion = CAMERA_HAL_API_VERSION_1_0;
+                    break;
+                }
+            }
+        }
+        return native_setup(new WeakReference<Camera>(this), cameraId, halVersion, packageName);
     }
 
     private int cameraInitNormal(int cameraId) {
@@ -882,7 +896,10 @@ public class Camera {
      *
      * @throws RuntimeException if starting preview fails; usually this would be
      *    because of a hardware or other low-level error, or because release()
-     *    has been called on this Camera instance.
+     *    has been called on this Camera instance. The QCIF (176x144) exception
+     *    mentioned in {@link Parameters#setPreviewSize setPreviewSize} and
+     *    {@link Parameters#setPictureSize setPictureSize} can also cause this
+     *    exception be thrown.
      */
     public native final void startPreview();
 
@@ -936,6 +953,7 @@ public class Camera {
      * @see android.media.MediaActionSound
      */
     public final void setPreviewCallback(PreviewCallback cb) {
+        android.util.SeempLog.record(66);
         mPreviewCallback = cb;
         mOneShot = false;
         mWithBuffer = false;
@@ -964,6 +982,7 @@ public class Camera {
      * @see android.media.MediaActionSound
      */
     public final void setOneShotPreviewCallback(PreviewCallback cb) {
+        android.util.SeempLog.record(68);
         mPreviewCallback = cb;
         mOneShot = true;
         mWithBuffer = false;
@@ -1004,6 +1023,7 @@ public class Camera {
      * @see android.media.MediaActionSound
      */
     public final void setPreviewCallbackWithBuffer(PreviewCallback cb) {
+        android.util.SeempLog.record(67);
         mPreviewCallback = cb;
         mOneShot = false;
         mWithBuffer = true;
@@ -1581,6 +1601,7 @@ public class Camera {
      */
     public final void takePicture(ShutterCallback shutter, PictureCallback raw,
             PictureCallback jpeg) {
+        android.util.SeempLog.record(65);
         takePicture(shutter, raw, null, jpeg);
     }
     private native final void native_takePicture(int msgType);
@@ -1619,6 +1640,7 @@ public class Camera {
      */
     public final void takePicture(ShutterCallback shutter, PictureCallback raw,
             PictureCallback postview, PictureCallback jpeg) {
+        android.util.SeempLog.record(65);
         mShutterCallback = shutter;
         mRawImageCallback = raw;
         mPostviewCallback = postview;
@@ -2088,6 +2110,23 @@ public class Camera {
          * as a set. Either they are all valid, or none of them are.
          */
         public Point mouth = null;
+
+        /**
+         * {@hide}
+         */
+        public int smileDegree = 0;
+        /**
+         * {@hide}
+         */
+        public int smileScore = 0;
+        /**
+         * {@hide}
+         */
+        public int blinkDetected = 0;
+        /**
+         * {@hide}
+         */
+        public int faceRecognised = 0;
     }
 
     /**
@@ -2335,6 +2374,15 @@ public class Camera {
         native_setLongshot(enable);
     }
     private native final void native_setLongshot(boolean enable);
+
+    /** @hide
+     * Stop longshot. Available only in ZSL.
+     */
+    public final void stopLongshot()
+    {
+        native_stopLongshot();
+    }
+    private native final void native_stopLongshot();
 
      /** @hide
      * Handles the Touch Co-ordinate.
@@ -3144,6 +3192,16 @@ public class Camera {
          * orientation should also be considered while setting picture size and
          * thumbnail size.
          *
+         * Exception on 176x144 (QCIF) resolution:
+         * Camera devices usually have a fixed capability for downscaling from
+         * larger resolution to smaller, and the QCIF resolution sometimes
+         * is not fully supported due to this limitation on devices with
+         * high-resolution image sensors. Therefore, trying to configure a QCIF
+         * preview size with any picture or video size larger than 1920x1080
+         * (either width or height) might not be supported, and
+         * {@link #setParameters(Camera.Parameters)} might throw a
+         * RuntimeException if it is not.
+         *
          * @param width  the width of the pictures, in pixels
          * @param height the height of the pictures, in pixels
          * @see #setDisplayOrientation(int)
@@ -3188,6 +3246,16 @@ public class Camera {
          * camera is used as the video source. In this case, the size of the
          * preview can be different from the resolution of the recorded video
          * during video recording.</p>
+         *
+         * <p>Exception on 176x144 (QCIF) resolution:
+         * Camera devices usually have a fixed capability for downscaling from
+         * larger resolution to smaller, and the QCIF resolution sometimes
+         * is not fully supported due to this limitation on devices with
+         * high-resolution image sensors. Therefore, trying to configure a QCIF
+         * video resolution with any preview or picture size larger than
+         * 1920x1080  (either width or height) might not be supported, and
+         * {@link #setParameters(Camera.Parameters)} will throw a
+         * RuntimeException if it is not.</p>
          *
          * @return a list of Size object if camera has separate preview and
          *         video output; otherwise, null is returned.
@@ -3482,6 +3550,16 @@ public class Camera {
          *
          * <p>Applications need to consider the display orientation. See {@link
          * #setPreviewSize(int,int)} for reference.</p>
+         *
+         * <p>Exception on 176x144 (QCIF) resolution:
+         * Camera devices usually have a fixed capability for downscaling from
+         * larger resolution to smaller, and the QCIF resolution sometimes
+         * is not fully supported due to this limitation on devices with
+         * high-resolution image sensors. Therefore, trying to configure a QCIF
+         * picture size with any preview or video size larger than 1920x1080
+         * (either width or height) might not be supported, and
+         * {@link #setParameters(Camera.Parameters)} might throw a
+         * RuntimeException if it is not.</p>
          *
          * @param width  the width for pictures, in pixels
          * @param height the height for pictures, in pixels
@@ -4614,6 +4692,7 @@ public class Camera {
             splitter.setString(str);
             int index = 0;
             for (String s : splitter) {
+                s = s.replaceAll("\\s","");
                 output[index++] = Integer.parseInt(s);
             }
         }

@@ -34,14 +34,14 @@ import android.app.Notification.BigPictureStyle;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
+import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -54,6 +54,8 @@ import android.graphics.PixelFormat;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.media.MediaActionSound;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
@@ -62,6 +64,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.Slog;
 import android.view.Display;
@@ -77,6 +80,7 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
+import com.android.internal.util.dotos.DOTUtils;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
 import com.android.systemui.util.NotificationChannels;
@@ -84,10 +88,10 @@ import com.android.systemui.util.NotificationChannels;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 
 /**
  * POD used in the AsyncTask which saves an image in the background.
@@ -127,29 +131,12 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
     private final NotificationManager mNotificationManager;
     private final Notification.Builder mNotificationBuilder, mPublicNotificationBuilder;
     private final File mScreenshotDir;
-    private final String mImageFileName;
+    private String mImageFileName;
     private final String mImageFilePath;
     private final long mImageTime;
     private final BigPictureStyle mNotificationStyle;
     private final int mImageWidth;
     private final int mImageHeight;
-
-    private static CharSequence getRunningActivityName(Context context) {
-        final ActivityManager am =
-                (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        final PackageManager pm = context.getPackageManager();
-
-        List<ActivityManager.RunningTaskInfo> tasks = am.getRunningTasks(1);
-        if (tasks != null && !tasks.isEmpty()) {
-            ActivityManager.RunningTaskInfo top = tasks.get(0);
-            try {
-                ActivityInfo info = pm.getActivityInfo(top.topActivity, 0);
-                return pm.getApplicationLabel(info.applicationInfo);
-            } catch (PackageManager.NameNotFoundException e) {
-            }
-        }
-        return null;
-    }
 
     SaveImageInBackgroundTask(Context context, SaveImageInBackgroundData data,
             NotificationManager nManager) {
@@ -159,15 +146,26 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         mParams = data;
         mImageTime = System.currentTimeMillis();
         String imageDate = new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date(mImageTime));
-        CharSequence appName = getRunningActivityName(context);
-        boolean onKeyguard = context.getSystemService(KeyguardManager.class).isKeyguardLocked();
-        if (!onKeyguard && appName != null) {
+        mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE, imageDate);
+        final PackageManager pm = context.getPackageManager();
+        ActivityInfo info = DOTUtils.getRunningActivityInfo(context);
+        if (info != null) {
+            CharSequence appName = pm.getApplicationLabel(info.applicationInfo);
+            boolean onKeyguard = context.getSystemService(KeyguardManager.class).isKeyguardLocked();
+            if (appName != null && !onKeyguard) {
             // Replace all spaces and special chars with an underscore
-            String appNameString = appName.toString().replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
-            mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE_APPNAME,
-                    imageDate, appNameString);
-        } else {
-            mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE, imageDate);
+            String appNameString = appName.toString();
+            try {
+                // With some languages like Virgin Islands English, the Settings app gets a weird
+                // long name and some special voodoo chars, so we convert the string to utf-8 to get
+                // a  char instead, easy to remove it then
+                final String temp = new String(appNameString.getBytes("ISO-8859-15"), "UTF-8");
+                appNameString = temp.replaceAll("[]+", "");
+            } catch (UnsupportedEncodingException e) {}
+            // Now remove all special chars from the app name
+            appNameString = appNameString.replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
+            mImageFileName = String.format(SCREENSHOT_FILE_NAME_TEMPLATE_APPNAME, imageDate, appNameString);
+            }
         }
 
         mScreenshotDir = new File(Environment.getExternalStoragePublicDirectory(
@@ -496,7 +494,7 @@ class GlobalScreenshot {
 
     private AsyncTask<Void, Void, Void> mSaveInBgTask;
 
-    private MediaActionSound mCameraSound;
+    private Ringtone  mScreenshotSound;
 
 
     /**
@@ -565,9 +563,9 @@ class GlobalScreenshot {
         mPreviewWidth = panelWidth;
         mPreviewHeight = r.getDimensionPixelSize(R.dimen.notification_max_height);
 
-        // Setup the Camera shutter sound
-        mCameraSound = new MediaActionSound();
-        mCameraSound.load(MediaActionSound.SHUTTER_CLICK);
+        // Setup the Screenshot sound
+        mScreenshotSound= RingtoneManager.getRingtone(mContext,
+                    Uri.parse("file://" + "/system/media/audio/ui/camera_click.ogg"));
     }
 
     /**
@@ -608,12 +606,15 @@ class GlobalScreenshot {
      */
     private void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible,
             Rect crop) {
+
+        mDisplay.getRealMetrics(mDisplayMetrics);
+        int displayHeight = mDisplayMetrics.heightPixels;
+        int displayWidth = mDisplayMetrics.widthPixels;
+        Rect displayRect = new Rect(0, 0, displayWidth, displayHeight);
         int rot = mDisplay.getRotation();
-        int width = crop.width();
-        int height = crop.height();
 
         // Take the screenshot
-        mScreenBitmap = SurfaceControl.screenshot(crop, width, height, rot);
+        mScreenBitmap = SurfaceControl.screenshot(displayRect, displayWidth, displayHeight, rot);
         if (mScreenBitmap == null) {
             notifyScreenshotError(mContext, mNotificationManager,
                     R.string.screenshot_failed_to_capture_text);
@@ -621,19 +622,29 @@ class GlobalScreenshot {
             return;
         }
 
+        if (crop != null) {
+            // Crop the screenshot to selected region
+            Bitmap swBitmap = mScreenBitmap.copy(Bitmap.Config.ARGB_8888, true);
+            Bitmap cropped = Bitmap.createBitmap(swBitmap, Math.max(0, crop.left), Math.max(0, crop.top),
+                    crop.width(), crop.height());
+            swBitmap.recycle();
+            mScreenBitmap.recycle();
+            mScreenBitmap = cropped;
+        }
+
         // Optimizations
         mScreenBitmap.setHasAlpha(false);
         mScreenBitmap.prepareToDraw();
 
         // Start the post-screenshot animation
-        startAnimation(finisher, mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels,
+        startAnimation(finisher, displayWidth, displayHeight,
                 statusBarVisible, navBarVisible);
     }
 
     void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible) {
         mDisplay.getRealMetrics(mDisplayMetrics);
         takeScreenshot(finisher, statusBarVisible, navBarVisible,
-                new Rect(0, 0, mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels));
+                null);
     }
 
     /**
@@ -657,16 +668,14 @@ class GlobalScreenshot {
                         view.setVisibility(View.GONE);
                         mWindowManager.removeView(mScreenshotLayout);
                         final Rect rect = view.getSelectionRect();
-                        if (rect != null) {
-                            if (rect.width() != 0 && rect.height() != 0) {
-                                // Need mScreenshotLayout to handle it after the view disappears
-                                mScreenshotLayout.post(new Runnable() {
-                                    public void run() {
-                                        takeScreenshot(finisher, statusBarVisible, navBarVisible,
-                                                rect);
-                                    }
-                                });
-                            }
+                        if (rect != null && !rect.isEmpty()) {
+                            // Need mScreenshotLayout to handle it after the view disappears
+                            mScreenshotLayout.post(new Runnable() {
+                                public void run() {
+                                    takeScreenshot(finisher, statusBarVisible, navBarVisible,
+                                            rect);
+                                }
+                            });
                         }
 
                         view.stopSelection();
@@ -691,8 +700,11 @@ class GlobalScreenshot {
     void stopScreenshot() {
         // If the selector layer still presents on screen, we remove it and resets its state.
         if (mScreenshotSelectorView.getSelectionRect() != null) {
-            mWindowManager.removeView(mScreenshotLayout);
-            mScreenshotSelectorView.stopSelection();
+            try {
+                mWindowManager.removeView(mScreenshotLayout);
+                mScreenshotSelectorView.stopSelection();
+            } catch (IllegalArgumentException ignored) {
+            }
         }
     }
 
@@ -742,7 +754,11 @@ class GlobalScreenshot {
             @Override
             public void run() {
                 // Play the shutter sound to notify that we've taken a screenshot
-                mCameraSound.play(MediaActionSound.SHUTTER_CLICK);
+                if (Settings.System.getInt(mContext.getContentResolver(), Settings.System.SCREENSHOT_SOUND, 1) == 1) {
+                    if (mScreenshotSound != null) {
+                        mScreenshotSound.play();
+                    }
+                }
 
                 mScreenshotView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
                 mScreenshotView.buildLayer();
@@ -889,8 +905,8 @@ class GlobalScreenshot {
 
         // Repurpose the existing notification to notify the user of the error
         Notification.Builder b = new Notification.Builder(context, NotificationChannels.ALERTS)
-            .setTicker(r.getString(R.string.screenshot_failed_title))
-            .setContentTitle(r.getString(R.string.screenshot_failed_title))
+            .setTicker(r.getString(R.string.screenshot_abort_title))
+            .setContentTitle(r.getString(R.string.screenshot_abort_title))
             .setContentText(errorMsg)
             .setSmallIcon(R.drawable.stat_notify_image_error)
             .setWhen(System.currentTimeMillis())
@@ -982,6 +998,7 @@ class GlobalScreenshot {
                     (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             final Uri uri = Uri.parse(intent.getStringExtra(SCREENSHOT_URI_ID));
             nm.cancel(SystemMessage.NOTE_GLOBAL_SCREENSHOT);
+            Toast.makeText(context, R.string.delete_screenshot_toast, Toast.LENGTH_SHORT).show();
 
             // And delete the image from the media store
             new DeleteImageInBackgroundTask(context).execute(uri);

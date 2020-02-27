@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2015 The Android Open Source Project
- * Copyright (C) 2017-2018 The LineageOS Project
+ * Copyright (C) 2017 AICP
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,22 +27,19 @@ import android.provider.Settings;
 import android.net.ConnectivityManager;
 import android.service.quicksettings.Tile;
 
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.R;
-
-import org.lineageos.internal.logging.LineageMetricsLogger;
+import com.android.systemui.R.drawable;
 
 /**
  * USB Tether quick settings tile
  */
 public class UsbTetherTile extends QSTileImpl<BooleanState> {
-
-    private final Icon mIcon = ResourceIcon.get(R.drawable.ic_qs_usb_tether);
-
-    private static final Intent TETHER_SETTINGS = new Intent().setComponent(new ComponentName(
-            "com.android.settings", "com.android.settings.TetherSettings"));
+    static final Intent TETHER_SETTINGS = new Intent().setComponent(new ComponentName(
+             "com.android.settings", "com.android.settings.TetherSettings"));
 
     private final ConnectivityManager mConnectivityManager;
 
@@ -51,9 +48,12 @@ public class UsbTetherTile extends QSTileImpl<BooleanState> {
     private boolean mUsbConnected = false;
     private boolean mUsbTetherEnabled = false;
 
+    private final Icon mIcon = ResourceIcon.get(drawable.ic_qs_usb_tether);
+
     public UsbTetherTile(QSHost host) {
         super(host);
-        mConnectivityManager = mContext.getSystemService(ConnectivityManager.class);
+        mConnectivityManager = (ConnectivityManager) mContext
+                .getSystemService(Context.CONNECTIVITY_SERVICE);
     }
 
     public BooleanState newTileState() {
@@ -77,9 +77,7 @@ public class UsbTetherTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleClick() {
-        if (mUsbConnected) {
-            mConnectivityManager.setUsbTethering(!mUsbTetherEnabled);
-        }
+        mConnectivityManager.setUsbTethering(!mUsbTetherEnabled);
     }
 
     @Override
@@ -102,11 +100,14 @@ public class UsbTetherTile extends QSTileImpl<BooleanState> {
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
+        if (state.slash == null) {
+            state.slash = new SlashState();
+        }
+        state.icon = mIcon;
+        state.slash.isSlashed = !state.value;
         state.value = mUsbTetherEnabled;
         state.label = mContext.getString(R.string.quick_settings_usb_tether_label);
-        state.icon = mIcon;
-        state.state = !mUsbConnected ? Tile.STATE_UNAVAILABLE
-                : mUsbTetherEnabled ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
+        state.state = mUsbTetherEnabled ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
     }
 
     @Override
@@ -116,6 +117,6 @@ public class UsbTetherTile extends QSTileImpl<BooleanState> {
 
     @Override
     public int getMetricsCategory() {
-        return LineageMetricsLogger.TILE_USB_TETHER;
+        return MetricsEvent.DOTEXTRAS;
     }
 }

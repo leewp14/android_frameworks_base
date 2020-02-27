@@ -32,6 +32,12 @@
     <string name="wifi_security_short_psk_generic">@string/wifi_security_short_wpa_wpa2</string>
     <!-- Do not translate.  Concise terminology for wifi with 802.1x EAP security -->
     <string name="wifi_security_short_eap">802.1x</string>
+    <!-- Do not translate.  Concise terminology for wifi with DPP security -->
+    <string name="wifi_security_short_dpp">DPP</string>
+    <!-- Do not translate.  Concise terminology for wifi with SAE security -->
+    <string name="wifi_security_short_sae">SAE</string>
+    <!-- Do not translate.  Concise terminology for wifi with OWE security -->
+    <string name="wifi_security_short_owe">OWE</string>
 
     <!-- Used in Wi-Fi settings dialogs when Wi-Fi does not have any security. -->
     <string name="wifi_security_none">None</string>
@@ -50,6 +56,12 @@
     <string name="wifi_security_eap">802.1x EAP</string>
     <!-- Do not translate.  Concise terminology for Passpoint network -->
     <string name="wifi_security_passpoint">Passpoint</string>
+    <!-- Do not translate.  Concise terminology for DPP network -->
+    <string name="wifi_security_dpp">DPP</string>
+    <!-- Do not translate.  Concise terminology for SAE network -->
+    <string name="wifi_security_sae">SAE</string>
+    <!-- Do not translate.  Concise terminology for OWE network -->
+    <string name="wifi_security_owe">OWE</string>
 
     <!-- Summary for the remembered network. -->
     <string name="wifi_remembered">Saved</string>
@@ -713,6 +725,9 @@
     <!-- UI debug setting: show the amount of overdraw in apps using the GPU [CHAR LIMIT=25] -->
     <string name="debug_hw_overdraw">Debug GPU overdraw</string>
 
+    <!-- UI debug setting: select the renderer to use by RenderThread [CHAR LIMIT=25] -->
+    <string name="debug_hw_renderer">Set GPU Renderer</string>
+
     <!-- UI debug setting: disable use of overlays? [CHAR LIMIT=25] -->
     <string name="disable_overlays">Disable HW overlays</string>
     <!-- UI debug setting: disable use of overlays summary [CHAR LIMIT=50] -->
@@ -1004,9 +1019,9 @@
     <!-- Hint text for the IP address -->
     <string name="wifi_ip_address_hint" translatable="false">192.168.1.128</string>
     <!-- Hint text for DNS -->
-    <string name="wifi_dns1_hint" translatable="false">8.8.8.8</string>
+    <string name="wifi_dns1_hint" translatable="false">1.0.0.1</string>
     <!-- Hint text for DNS -->
-    <string name="wifi_dns2_hint" translatable="false">8.8.4.4</string>
+    <string name="wifi_dns2_hint" translatable="false">1.1.1.1</string>
     <!-- Hint text for the gateway -->
     <string name="wifi_gateway_hint" translatable="false">192.168.1.1</string>
     <!-- Hint text for network prefix length -->

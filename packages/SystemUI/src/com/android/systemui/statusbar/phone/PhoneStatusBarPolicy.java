@@ -31,7 +31,9 @@ import android.app.Notification.Action;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.SynchronousUserSwitchObserver;
+import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -43,6 +45,7 @@ import android.content.pm.PackageManager;
 import android.graphics.drawable.Icon;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.nfc.NfcAdapter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
@@ -60,6 +63,7 @@ import android.util.Pair;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
+import com.android.settingslib.bluetooth.CachedBluetoothDevice;
 import com.android.systemui.Dependency;
 import com.android.systemui.DockedStackExistsListener;
 import com.android.systemui.R;
@@ -90,6 +94,7 @@ import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.util.NotificationChannels;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
@@ -119,6 +124,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
     private final String mSlotHeadset;
     private final String mSlotDataSaver;
     private final String mSlotLocation;
+    private final String mSlotNfc;
 
     private final Context mContext;
     private final Handler mHandler = new Handler();
@@ -146,6 +152,8 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
     private boolean mVolumeVisible;
     private boolean mCurrentUserSetup;
     private boolean mDockedStackExists;
+    private boolean mNfcVisible;
+    private NfcAdapter mAdapter;
 
     private boolean mManagedProfileIconVisible = false;
 
@@ -182,6 +190,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mSlotHeadset = context.getString(com.android.internal.R.string.status_bar_headset);
         mSlotDataSaver = context.getString(com.android.internal.R.string.status_bar_data_saver);
         mSlotLocation = context.getString(com.android.internal.R.string.status_bar_location);
+        mSlotNfc = context.getString(com.android.internal.R.string.status_bar_nfc);
 
         // listen for broadcasts
         IntentFilter filter = new IntentFilter();
@@ -194,6 +203,7 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
+        filter.addAction(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
 
         // listen for user / profile change.
@@ -240,6 +250,12 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         mIconController.setIcon(mSlotDataSaver, R.drawable.stat_sys_data_saver,
                 context.getString(R.string.accessibility_data_saver_on));
         mIconController.setIconVisibility(mSlotDataSaver, false);
+
+        mIconController.setIcon(mSlotNfc, R.drawable.stat_sys_nfc,
+                mContext.getString(R.string.accessibility_status_bar_nfc));
+
+        mIconController.setIconVisibility(mSlotNfc, false);
+        updateNfc();
 
         mRotationLockController.addCallback(this);
         mBluetooth.addCallback(this);
@@ -366,6 +382,26 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         }
     }
 
+    private NfcAdapter getAdapter() {
+        if (mAdapter == null) {
+            try {
+                mAdapter = NfcAdapter.getNfcAdapter(mContext);
+            } catch (UnsupportedOperationException e) {
+                mAdapter = null;
+            }
+        }
+        return mAdapter;
+    }
+
+    private final void updateNfc() {
+        mNfcVisible =  getAdapter() != null && getAdapter().isEnabled();
+        if (mNfcVisible) {
+            mIconController.setIconVisibility(mSlotNfc, true);
+        } else {
+            mIconController.setIconVisibility(mSlotNfc, false);
+        }
+    }
+
     private final void updateVolumeZen() {
         AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
 
@@ -436,40 +472,80 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
         int iconId = R.drawable.stat_sys_data_bluetooth;
         String contentDescription =
                 mContext.getString(R.string.accessibility_quick_settings_bluetooth_on);
-        boolean bluetoothVisible = false;
+        boolean bluetoothEnabled = false;
         if (mBluetooth != null) {
-            if (mBluetooth.isBluetoothConnected()) {
-                int batteryLevel = mBluetooth.getConnectedDevices().get(0).getBatteryLevel();
-                if (batteryLevel == 100) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_9;
-                } else if (batteryLevel >= 90) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_8;
-                } else if (batteryLevel >= 80) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_7;
-                } else if (batteryLevel >= 70) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_6;
-                } else if (batteryLevel >= 60) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_5;
-                } else if (batteryLevel >= 50) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_4;
-                } else if (batteryLevel >= 40) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_3;
-                } else if (batteryLevel >= 30) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_2;
-                } else if (batteryLevel >= 20) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_1;
-                } else if (batteryLevel >= 10) {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected_battery_0;
-                } else {
-                    iconId = R.drawable.stat_sys_data_bluetooth_connected;
+            bluetoothEnabled = mBluetooth.isBluetoothEnabled();
+            final Collection<CachedBluetoothDevice> devices = mBluetooth.getDevices();
+            if (devices != null) {
+                // get battery level for the first device with battery level support
+                for (CachedBluetoothDevice device : devices) {
+                    // don't get the level if still pairing
+                    if (mBluetooth.getBondState(device) == BluetoothDevice.BOND_NONE) continue;
+                    int state = device.getMaxConnectionState();
+                    if (state == BluetoothProfile.STATE_CONNECTED) {
+                        int batteryLevel = device.getBatteryLevel();
+                        BluetoothClass type = device.getBtClass();
+                        if (batteryLevel != BluetoothDevice.BATTERY_LEVEL_UNKNOWN && showBatteryForThis(type)) {
+                            iconId = getBtLevelIconRes(batteryLevel);
+                        } else {
+                            iconId = R.drawable.stat_sys_data_bluetooth_connected;
+                        }
+                        contentDescription = mContext.getString(R.string.accessibility_bluetooth_connected);
+                        break;
+                    }
                 }
-                contentDescription = mContext.getString(R.string.accessibility_bluetooth_connected);
-                bluetoothVisible = mBluetooth.isBluetoothEnabled();
             }
         }
 
         mIconController.setIcon(mSlotBluetooth, iconId, contentDescription);
-        mIconController.setIconVisibility(mSlotBluetooth, bluetoothVisible);
+        mIconController.setIconVisibility(mSlotBluetooth, bluetoothEnabled);
+    }
+
+    private int getBtLevelIconRes(int batteryLevel) {
+        if (batteryLevel == 100) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_9;
+        } else if (batteryLevel >= 90) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_8;
+        } else if (batteryLevel >= 80) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_7;
+        } else if (batteryLevel >= 70) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_6;
+        } else if (batteryLevel >= 60) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_5;
+        } else if (batteryLevel >= 50) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_4;
+        } else if (batteryLevel >= 40) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_3;
+        } else if (batteryLevel >= 30) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_2;
+        } else if (batteryLevel >= 20) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_1;
+        } else if (batteryLevel >= 10) {
+            return R.drawable.stat_sys_data_bluetooth_connected_battery_0;
+        } else {
+            return R.drawable.stat_sys_data_bluetooth_connected;
+        }
+     }
+
+    private boolean showBatteryForThis(BluetoothClass type) {
+        boolean show = false;
+        if (type != null) {
+            switch (type.getDeviceClass()) {
+            case BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET:
+            case BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE:
+            case BluetoothClass.Device.AUDIO_VIDEO_PORTABLE_AUDIO:
+            case BluetoothClass.Device.AUDIO_VIDEO_LOUDSPEAKER:
+            case BluetoothClass.Device.AUDIO_VIDEO_HEADPHONES:
+                show = true;
+                break;
+            default:
+                show = false;
+                break;
+            }
+        } else {
+            show = false;
+        }
+        return show;
     }
 
     private final void updateTTY() {
@@ -839,6 +915,9 @@ public class PhoneStatusBarPolicy implements Callback, Callbacks,
                     break;
                 case AudioManager.ACTION_HEADSET_PLUG:
                     updateHeadsetPlug(intent);
+                    break;
+                case NfcAdapter.ACTION_ADAPTER_STATE_CHANGED:
+                    updateNfc();
                     break;
                 case BluetoothDevice.ACTION_BATTERY_LEVEL_CHANGED:
                     updateBluetooth();

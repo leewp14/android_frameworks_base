@@ -95,8 +95,6 @@ import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.Set;
 
-import lineageos.providers.LineageSettings;
-
 /**
  * UsbDeviceManager manages USB state in device mode.
  */
@@ -154,6 +152,7 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
     private static final int MSG_SET_FUNCTIONS_TIMEOUT = 15;
     private static final int MSG_GET_CURRENT_USB_FUNCTIONS = 16;
     private static final int MSG_FUNCTION_SWITCH_TIMEOUT = 17;
+    private static final int MSG_GADGET_HAL_REGISTERED = 18;
 
     private static final int AUDIO_MODE_SOURCE = 1;
 
@@ -281,8 +280,8 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
         }
         mControlFds.put(UsbManager.FUNCTION_MTP, mtpFd);
         FileDescriptor ptpFd = nativeOpenControl(UsbManager.USB_FUNCTION_PTP);
-        if (ptpFd == null) {
-            Slog.e(TAG, "Failed to open control for ptp");
+        if (mtpFd == null) {
+            Slog.e(TAG, "Failed to open control for mtp");
         }
         mControlFds.put(UsbManager.FUNCTION_PTP, ptpFd);
 
@@ -361,20 +360,6 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
 
         mContext.registerReceiver(languageChangedReceiver,
                 new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
-
-        ContentObserver adbNotificationObserver = new ContentObserver(null) {
-            @Override
-            public void onChange(boolean selfChange) {
-                mHandler.updateAdbNotification(false);
-            }
-        };
-
-        mContentResolver.registerContentObserver(
-                LineageSettings.Secure.getUriFor(LineageSettings.Secure.ADB_NOTIFY),
-                false, adbNotificationObserver);
-        mContentResolver.registerContentObserver(
-                LineageSettings.Secure.getUriFor(LineageSettings.Secure.ADB_PORT),
-                false, adbNotificationObserver);
 
         // Watch for USB configuration changes
         mUEventObserver = new UsbUEventObserver();
@@ -484,7 +469,7 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
 
         private UsbAccessory mCurrentAccessory;
         private int mUsbNotificationId;
-        private int mAdbNotificationId;
+        private boolean mAdbNotificationShown;
         private boolean mUsbCharging;
         private boolean mHideUsbNotification;
         private boolean mSupportsAllCombinations;
@@ -555,7 +540,8 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
             // We do not show the USB notification if the primary volume supports mass storage.
             // The legacy mass storage UI will be used instead.
             final StorageManager storageManager = StorageManager.from(mContext);
-            final StorageVolume primary = storageManager.getPrimaryVolume();
+            final StorageVolume primary =
+                    storageManager != null ? storageManager.getPrimaryVolume() : null;
 
             boolean massStorageSupported = primary != null && primary.allowMassStorage();
             mUseUsbNotification = !massStorageSupported && mContext.getResources().getBoolean(
@@ -1197,33 +1183,17 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
         protected void updateAdbNotification(boolean force) {
             if (mNotificationManager == null) return;
             final int id = SystemMessage.NOTE_ADB_ACTIVE;
-            final int titleRes;
-            boolean usbAdbActive = mAdbEnabled && mConnected;
-            boolean netAdbActive = mAdbEnabled &&
-                    LineageSettings.Secure.getInt(mContentResolver,
-                            LineageSettings.Secure.ADB_PORT, -1) > 0;
-            boolean hideNotification = SystemProperties.getInt("persist.adb.notify", -1) == 0
-                    || LineageSettings.Secure.getInt(mContext.getContentResolver(),
-                            LineageSettings.Secure.ADB_NOTIFY, 1) == 0;
+            final int titleRes = com.android.internal.R.string.adb_active_notification_title;
 
-            if (hideNotification) {
-                titleRes = 0;
-            } else if (usbAdbActive && netAdbActive) {
-                titleRes = com.android.internal.R.string.adb_both_active_notification_title;
-            } else if (usbAdbActive) {
-                titleRes = com.android.internal.R.string.adb_active_notification_title;
-            } else if (netAdbActive) {
-                titleRes = com.android.internal.R.string.adb_net_active_notification_title;
-            } else {
-                titleRes = 0;
-            }
+            if (mAdbEnabled && mConnected) {
+                if ("0".equals(getSystemProperty("persist.adb.notify", ""))) return;
 
-            if (titleRes != mAdbNotificationId) {
-                if (mAdbNotificationId != 0) {
+                if (force && mAdbNotificationShown) {
+                    mAdbNotificationShown = false;
                     mNotificationManager.cancelAsUser(null, id, UserHandle.ALL);
                 }
 
-                if (titleRes != 0) {
+                if (!mAdbNotificationShown) {
                     Resources r = mContext.getResources();
                     CharSequence title = r.getText(titleRes);
                     CharSequence message = r.getText(
@@ -1252,11 +1222,13 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
                                     .extend(new Notification.TvExtender()
                                             .setChannelId(ADB_NOTIFICATION_CHANNEL_ID_TV))
                                     .build();
+                    mAdbNotificationShown = true;
                     mNotificationManager.notifyAsUser(null, id, notification,
                             UserHandle.ALL);
                 }
-
-                mAdbNotificationId = titleRes;
+            } else if (mAdbNotificationShown) {
+                mAdbNotificationShown = false;
+                mNotificationManager.cancelAsUser(null, id, UserHandle.ALL);
             }
         }
 
@@ -1762,9 +1734,15 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
         protected static final String CTL_STOP = "ctl.stop";
 
         /**
-         * Adb natvie daemon
+         * Adb native daemon.
          */
         protected static final String ADBD = "adbd";
+
+        /**
+         * Gadget HAL fully qualified instance name for registering for ServiceNotification.
+         */
+        protected static final String GADGET_HAL_FQ_NAME =
+                "android.hardware.usb.gadget@1.0::IUsbGadget";
 
         protected boolean mCurrentUsbFunctionsRequested;
 
@@ -1776,8 +1754,7 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
                 ServiceNotification serviceNotification = new ServiceNotification();
 
                 boolean ret = IServiceManager.getService()
-                        .registerForNotifications("android.hardware.usb.gadget@1.0::IUsbGadget",
-                                "", serviceNotification);
+                        .registerForNotifications(GADGET_HAL_FQ_NAME, "", serviceNotification);
                 if (!ret) {
                     Slog.e(TAG, "Failed to register usb gadget service start notification");
                     return;
@@ -1788,8 +1765,8 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
                     mGadgetProxy.linkToDeath(new UsbGadgetDeathRecipient(),
                             USB_GADGET_HAL_DEATH_COOKIE);
                     mCurrentFunctions = UsbManager.FUNCTION_NONE;
-                    mGadgetProxy.getCurrentUsbFunctions(new UsbGadgetCallback());
                     mCurrentUsbFunctionsRequested = true;
+                    mGadgetProxy.getCurrentUsbFunctions(new UsbGadgetCallback());
                 }
                 String state = FileUtils.readTextFile(new File(STATE_PATH), 0, null).trim();
                 updateState(state);
@@ -1819,20 +1796,12 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
             @Override
             public void onRegistration(String fqName, String name, boolean preexisting) {
                 Slog.i(TAG, "Usb gadget hal service started " + fqName + " " + name);
-                synchronized (mGadgetProxyLock) {
-                    try {
-                        mGadgetProxy = IUsbGadget.getService();
-                        mGadgetProxy.linkToDeath(new UsbGadgetDeathRecipient(),
-                                USB_GADGET_HAL_DEATH_COOKIE);
-                        if (!mCurrentFunctionsApplied && !mCurrentUsbFunctionsRequested) {
-                            setEnabledFunctions(mCurrentFunctions, false);
-                        }
-                    } catch (NoSuchElementException e) {
-                        Slog.e(TAG, "Usb gadget hal not found", e);
-                    } catch (RemoteException e) {
-                        Slog.e(TAG, "Usb Gadget hal not responding", e);
-                    }
+                if (!fqName.equals(GADGET_HAL_FQ_NAME)) {
+                    Slog.e(TAG, "fqName does not match");
+                    return;
                 }
+
+                sendMessage(MSG_GADGET_HAL_REGISTERED, preexisting);
             }
         }
 
@@ -1868,6 +1837,23 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
                      */
                     if (msg.arg1 != 1) {
                         setEnabledFunctions(UsbManager.FUNCTION_NONE, !mAdbEnabled);
+                    }
+                    break;
+                case MSG_GADGET_HAL_REGISTERED:
+                    boolean preexisting = msg.arg1 == 1;
+                    synchronized (mGadgetProxyLock) {
+                        try {
+                            mGadgetProxy = IUsbGadget.getService();
+                            mGadgetProxy.linkToDeath(new UsbGadgetDeathRecipient(),
+                                    USB_GADGET_HAL_DEATH_COOKIE);
+                            if (!mCurrentFunctionsApplied && !preexisting) {
+                                setEnabledFunctions(mCurrentFunctions, false);
+                            }
+                        } catch (NoSuchElementException e) {
+                            Slog.e(TAG, "Usb gadget hal not found", e);
+                        } catch (RemoteException e) {
+                            Slog.e(TAG, "Usb Gadget hal not responding", e);
+                        }
                     }
                     break;
                 default:

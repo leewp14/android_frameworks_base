@@ -955,6 +955,9 @@
     <!-- Interruption level: Alarms only.  Optimized for narrow two-line display. [CHAR LIMIT=40] -->
     <string name="interruption_level_alarms_twoline">Alarms\nonly</string>
 
+    <!-- Indication on the keyguard that is shown when the device is wirelessly charging. [CHAR LIMIT=80]-->
+    <string name="keyguard_indication_charging_time_wireless"><xliff:g id="percentage" example="20%">%2$s</xliff:g> • Wirelessly Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%1$s</xliff:g> until full)</string>
+
     <!-- Indication on the keyguard that is shown when the device is charging. [CHAR LIMIT=50]-->
     <string name="keyguard_indication_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
 
@@ -1299,15 +1302,14 @@
     <string name="screen_pinning_title">Screen is pinned</string>
     <!-- Screen pinning dialog description. -->
     <string name="screen_pinning_description">This keeps it in view until you unpin. Touch &amp; hold Back and Overview to unpin.</string>
-    <string name="screen_pinning_description_recents_invisible">This keeps it in view until you unpin. Touch &amp; hold Back and Home to unpin.</string>
+    <string name="screen_pinning_description_recents_invisible">This keeps it in view until you unpin. Touch &amp; hold Back to unpin.</string>
     <!-- Screen pinning dialog description. -->
     <string name="screen_pinning_description_accessible">This keeps it in view until you unpin. Touch &amp; hold Overview to unpin.</string>
-    <string name="screen_pinning_description_recents_invisible_accessible">This keeps it in view until you unpin. Touch &amp; hold Home to unpin.</string>
+    <string name="screen_pinning_description_recents_invisible_accessible">This keeps it in view until you unpin. Touch &amp; hold Back to unpin.</string>
     <!-- Notify use that they are in Lock-to-app -->
     <string name="screen_pinning_toast">To unpin this screen, touch &amp; hold Back and Overview
         buttons</string>
-    <string name="screen_pinning_toast_recents_invisible">To unpin this screen, touch &amp; hold Back
-        and Home buttons</string>
+    <string name="screen_pinning_toast_recents_invisible">To unpin this screen, touch &amp; hold Back button</string>
     <!-- Screen pinning positive response. -->
     <string name="screen_pinning_positive">Got it</string>
     <!-- Screen pinning negative response. -->
@@ -1417,6 +1419,9 @@
     <!-- Name of the work status bar icon. -->
     <string name="status_bar_work">Work profile</string>
 
+    <!-- Name of the nfc status bar icon. -->
+    <string name="status_bar_nfc">NFC</string>
+
     <!-- Name of the airplane status bar icon. -->
     <string name="status_bar_airplane">Airplane mode</string>
 
@@ -1451,6 +1456,9 @@
 
     <!-- Accessibility label for managed profile icon (not shown on screen) [CHAR LIMIT=NONE] -->
     <string name="accessibility_managed_profile">Work profile</string>
+
+    <!-- Accessibility label for nfc icon (not shown on screen) [CHAR LIMIT=NONE] -->
+    <string name="accessibility_status_bar_nfc">Nfc</string>
 
     <!-- Title of warning when entering System UI tuner for first time [CHAR LIMIT=NONE] -->
     <string name="tuner_warning_title">Fun for some but not for all</string>
@@ -2067,6 +2075,14 @@
     <string name="high_temp_notif_message">Some features limited while phone cools down</string>
     <!-- Text body for dialog alerting user that their phone has reached a certain temperature and may start to slow down in order to cool down. [CHAR LIMIT=300] -->
     <string name="high_temp_dialog_message">Your phone will automatically try to cool down. You can still use your phone, but it may run slower.\n\nOnce your phone has cooled down, it will run normally.</string>
+    <!-- Title for alarm dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=30] -->
+    <string name="high_temp_alarm_title">Unplug charger</string>
+    <!-- Text body for dialog alerting user the usb adapter has reached a certain temperature that should disconnect charging cable immediately. [CHAR LIMIT=300] -->
+    <string name="high_temp_alarm_notify_message">There\u2019s an issue charging this device. Unplug the power adapter and take care as the cable may be warm.</string>
+    <!-- Text link for user to see more detail about overheat alarm. [CHAR LIMIT=300] -->
+    <string name="high_temp_alarm_help_care_steps">See care steps</string>
+    <!-- Help link of context for usb overheat web page -->
+    <string name="high_temp_alarm_help_url" translatable="false">help_uri_usb_warm</string>
 
     <!-- SysUI Tuner: Button to select lock screen shortcut [CHAR LIMIT=60] -->
     <string name="lockscreen_shortcut_left">Left shortcut</string>

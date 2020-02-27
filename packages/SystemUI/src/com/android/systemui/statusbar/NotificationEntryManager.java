@@ -26,6 +26,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
+import android.media.MediaMetadata;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.RemoteException;
@@ -129,6 +130,12 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
     protected boolean mDisableNotificationAlerts;
     protected NotificationListContainer mListContainer;
     private ExpandableNotificationRow.OnAppOpsClickListener mOnAppOpsClickListener;
+
+    private NotificationData.Entry mEntryToRefresh;
+    private boolean mDontPulse;
+
+    private String mTrackInfoSeparator;
+
     /**
      * Notifications with keys in this set are not actually around anymore. We kept them around
      * when they were canceled in response to a remote input interaction. This allows us to show
@@ -156,16 +163,27 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             }
 
             // Check if the notification is displaying the menu, if so slide notification back
-            if (row.getProvider() != null && row.getProvider().isMenuVisible()) {
+            if (isMenuVisible(row)) {
                 row.animateTranslateNotification(0);
                 return;
-            }
+            } else if (row.isChildInGroup() && isMenuVisible(row.getNotificationParent())) {
+                row.getNotificationParent().animateTranslateNotification(0);
+                return;
+            } else if (row.isSummaryWithChildren() && row.areChildrenExpanded()) {
+                // We never want to open the app directly if the user clicks in between
+                // the notifications.
+                return;
+            } 
 
             // Mark notification for one frame.
             row.setJustClicked(true);
             DejankUtils.postAfterTraversal(() -> row.setJustClicked(false));
 
             mCallback.onNotificationClicked(sbn, row);
+        }
+
+        private boolean isMenuVisible(ExpandableNotificationRow row) {
+            return row.getProvider() != null && row.getProvider().isMenuVisible();
         }
 
         public void register(ExpandableNotificationRow row, StatusBarNotification sbn) {
@@ -241,6 +259,8 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         mMessagingUtil = new NotificationMessagingUtil(context);
         mSystemServicesProxy = SystemServicesProxy.getInstance(mContext);
         mGroupManager.setPendingEntries(mPendingNotifications);
+
+        mTrackInfoSeparator = mContext.getResources().getString(R.string.ambientmusic_songinfo);
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
@@ -470,6 +490,32 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             mPresenter.updateNotificationViews();
         }
         entry.row.setLowPriorityStateUpdated(false);
+
+        if (mEntryToRefresh == entry && mMediaManager.isMediaNotification(entry)) {
+            String notificationText = null;
+            final MediaMetadata data = mMediaManager.getMediaMetadata();
+            if (data != null) {
+                CharSequence artist = data.getText(MediaMetadata.METADATA_KEY_ARTIST);
+                //CharSequence album = data.getText(MediaMetadata.METADATA_KEY_ALBUM);
+                CharSequence title = data.getText(MediaMetadata.METADATA_KEY_TITLE);
+                if (artist != null && title != null) {
+                    notificationText = String.format(mTrackInfoSeparator, title.toString(), artist.toString());
+                }
+            }
+            mMediaManager.setMediaNotificationText(notificationText, false);
+
+            if (!mDontPulse) {
+                final Notification n = entry.notification.getNotification();
+                final int[] colors = {n.backgroundColor, n.foregroundColor,
+                        n.primaryTextColor, n.secondaryTextColor};
+                mMediaManager.setPulseColors(n.isColorizedMedia(), colors);
+            }
+        }
+    }
+
+    public void setEntryToRefresh(NotificationData.Entry entry, boolean dontPulse) {
+        mEntryToRefresh = entry;
+        mDontPulse = dontPulse;
     }
 
     @Override

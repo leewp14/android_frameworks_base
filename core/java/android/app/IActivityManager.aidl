@@ -121,7 +121,7 @@ interface IActivityManager {
     oneway void activityIdle(in IBinder token, in Configuration config,
             in boolean stopProfiling);
     void activityPaused(in IBinder token);
-    oneway void activityStopped(in IBinder token, in Bundle state,
+    void activityStopped(in IBinder token, in Bundle state,
             in PersistableBundle persistentState, in CharSequence description);
     String getCallingPackage(in IBinder token);
     ComponentName getCallingActivity(in IBinder token);
@@ -714,4 +714,9 @@ interface IActivityManager {
 
     /** @see android.app.ActivityManager#alwaysShowUnsupportedCompileSdkWarning */
     void alwaysShowUnsupportedCompileSdkWarning(in ComponentName activity);
+
+    /**
+     *  Should disable touch if three fingers to screen shot is active?
+     */
+    boolean isSwipeToScreenshotGestureActive();
 }

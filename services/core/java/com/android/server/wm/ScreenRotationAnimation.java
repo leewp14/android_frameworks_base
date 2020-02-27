@@ -27,6 +27,7 @@ import static com.android.server.wm.ScreenRotationAnimationProto.ANIMATION_RUNNI
 import static com.android.server.wm.ScreenRotationAnimationProto.STARTED;
 
 import android.content.Context;
+import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.os.IBinder;
@@ -42,6 +43,10 @@ import android.view.SurfaceSession;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Transformation;
+import android.os.Handler;
+import android.os.Message;
+import com.android.server.DisplayThread;
+import android.os.Looper;
 
 import java.io.PrintWriter;
 
@@ -148,6 +153,7 @@ class ScreenRotationAnimation {
     private boolean mMoreStartExit;
     private boolean mMoreStartFrame;
     long mHalfwayPoint;
+    final H mHandler = new H(DisplayThread.get().getLooper());
 
     private final WindowManagerService mService;
 
@@ -285,11 +291,34 @@ class ScreenRotationAnimation {
             if (displayHandle != null) {
                 Surface sur = new Surface();
                 sur.copyFrom(mSurfaceControl);
-                SurfaceControl.screenshot(displayHandle, sur);
-                t.setLayer(mSurfaceControl, SCREEN_FREEZE_LAYER_SCREENSHOT);
-                t.setAlpha(mSurfaceControl, 0);
-                t.show(mSurfaceControl);
+                GraphicBuffer gb = SurfaceControl.screenshotToBufferWithSecureLayersUnsafe(
+                        new Rect(), 0 /* width */, 0 /* height */, 0 /* minLayer */,
+                        0 /* maxLayer */, false /* useIdentityTransform */, 0 /* rotation */);
+                if (gb != null) {
+                    try {
+                        sur.attachAndQueueBuffer(gb);
+                    } catch (RuntimeException e) {
+                        Slog.w(TAG, "Failed to attach screenshot - " + e.getMessage());
+                    }
+                    // If the screenshot contains secure layers, we have to make sure the
+                    // screenshot surface we display it in also has FLAG_SECURE so that
+                    // the user can not screenshot secure layers via the screenshot surface.
+                    if (gb.doesContainSecureLayers()) {
+                        t.setSecure(mSurfaceControl, true);
+                    }
+                    t.setLayer(mSurfaceControl, SCREEN_FREEZE_LAYER_SCREENSHOT);
+                    t.setAlpha(mSurfaceControl, 0);
+                    t.show(mSurfaceControl);
+                } else {
+                    Slog.w(TAG, "Unable to take screenshot of display " + displayId);
+                }
                 sur.destroy();
+                // If screenshot layer stays for more than freeze
+                // timeout value with no updates on the screen,
+                // destroy the layer explicitly.
+                mHandler.removeMessages(H.SCREENSHOT_FREEZE_TIMEOUT);
+                mHandler.sendEmptyMessageDelayed(H.SCREENSHOT_FREEZE_TIMEOUT,
+                                           H.FREEZE_TIMEOUT_VAL);
             } else {
                 Slog.w(TAG, "Built-in display " + displayId + " is null.");
             }
@@ -985,5 +1014,38 @@ class ScreenRotationAnimation {
 
     public Transformation getEnterTransformation() {
         return mEnterTransformation;
+    }
+
+    final class H extends Handler {
+        public static final int SCREENSHOT_FREEZE_TIMEOUT = 2;
+
+        //Set the freeze timeout value to 6sec (which is greater than
+        //APP_FREEZE_TIMEOUT value in WindowManagerService)
+        public static final int FREEZE_TIMEOUT_VAL = 6000;
+
+        public H(Looper looper) {
+            super(looper, null, true /*async*/);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case SCREENSHOT_FREEZE_TIMEOUT: {
+                     if ((mSurfaceControl != null) && (isAnimating())) {
+                        Slog.e(TAG, "Exceeded Freeze timeout. Destroy layers");
+                        kill();
+                     } else if (mSurfaceControl != null){
+                        Slog.e(TAG,
+                          "No animation, exceeded freeze timeout. Destroy Screenshot layer");
+                        mSurfaceControl.destroy();
+                        mSurfaceControl = null;
+                     }
+                     break;
+                }
+                default:
+                     Slog.e(TAG, "No Valid Message To Handle");
+                break;
+            }
+        }
     }
 }

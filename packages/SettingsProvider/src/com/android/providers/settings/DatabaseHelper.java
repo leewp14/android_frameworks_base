@@ -718,7 +718,7 @@ class DatabaseHelper extends SQLiteOpenHelper {
                    Secure.LOCK_PATTERN_SIZE,
                    Secure.LOCK_DOTS_VISIBLE,
                    Secure.LOCK_SHOW_ERROR_PATH,
-                   "lock_screen_pass_to_security_view",
+                   Settings.Secure.LOCK_PASS_TO_SECURITY_VIEW,
                    "lockscreen.password_type",
                    "lockscreen.lockoutattemptdeadline",
                    "lockscreen.patterneverchosen",
@@ -2635,6 +2635,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
                     R.integer.def_heads_up_enabled);
 
             loadSetting(stmt, Settings.Global.DEVICE_NAME, getDefaultDeviceName());
+
+            loadIntegerSetting(stmt, Global.DEVELOPMENT_SETTINGS_ENABLED,
+                    R.integer.def_development_settings);
 
             /*
              * IMPORTANT: Do not add any more upgrade steps here as the global,

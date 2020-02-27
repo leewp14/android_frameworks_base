@@ -31,6 +31,9 @@ import android.metrics.LogMaker;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.UserHandle;
+import android.os.Vibrator;
+import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
@@ -51,6 +54,8 @@ import com.android.systemui.plugins.qs.QSTile.State;
 import com.android.systemui.qs.PagedTileLayout.TilePage;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.QuickStatusBarHeader;
+
+import com.android.systemui.R;
 
 import java.util.ArrayList;
 
@@ -93,6 +98,13 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
 
     abstract protected void handleUpdateState(TState state, Object arg);
 
+    protected Vibrator mVibrator;
+
+    @Override
+    public boolean isDualTarget() {
+        return false;
+    }
+
     /**
      * Declare the category of this tile.
      *
@@ -104,6 +116,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     protected QSTileImpl(QSHost host) {
         mHost = host;
         mContext = host.getContext();
+        mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
     }
 
     /**
@@ -158,6 +171,17 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
 
     // safe to call from any thread
 
+    public boolean isVibrationEnabled() {
+        return (Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                Settings.Secure.QUICK_SETTINGS_TILES_VIBRATE, 0, UserHandle.USER_CURRENT) == 1);
+    }
+     public void vibrateTile(int duration) {
+        if (!isVibrationEnabled()) { return; }
+        if (mVibrator != null) {
+            if (mVibrator.hasVibrator()) { mVibrator.vibrate(duration); }
+        }
+    }
+
     public void addCallback(Callback callback) {
         mHandler.obtainMessage(H.ADD_CALLBACK, callback).sendToTarget();
     }
@@ -173,6 +197,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     public void click() {
         mMetricsLogger.write(populate(new LogMaker(ACTION_QS_CLICK).setType(TYPE_ACTION)));
         mHandler.sendEmptyMessage(H.CLICK);
+        vibrateTile(45);
     }
 
     public void secondaryClick() {
@@ -183,6 +208,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     public void longClick() {
         mMetricsLogger.write(populate(new LogMaker(ACTION_QS_LONG_PRESS).setType(TYPE_ACTION)));
         mHandler.sendEmptyMessage(H.LONG_CLICK);
+        vibrateTile(45);
 
         Prefs.putInt(
                 mContext,
@@ -256,8 +282,10 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     }
 
     protected void handleLongClick() {
-        Dependency.get(ActivityStarter.class).postStartActivityDismissingKeyguard(
-                getLongClickIntent(), 0);
+        if (getLongClickIntent() != null) {
+            Dependency.get(ActivityStarter.class).postStartActivityDismissingKeyguard(
+                    getLongClickIntent(), 0);
+        }
     }
 
     public abstract Intent getLongClickIntent();
@@ -375,14 +403,30 @@ public abstract class QSTileImpl<TState extends State> implements QSTile {
     public abstract CharSequence getTileLabel();
 
     public static int getColorForState(Context context, int state) {
+
+        boolean enableQsTileTinting = context.getResources().getBoolean(R.bool.config_enable_qs_tile_tinting);
+
         switch (state) {
             case Tile.STATE_UNAVAILABLE:
-                return Utils.getDisabled(context,
+                if (!enableQsTileTinting) {
+                    return Utils.getDisabled(context,
                         Utils.getColorAttr(context, android.R.attr.textColorSecondary));
+                } else {
+                    return Utils.getDisabled(context,
+                        context.getColor(R.color.qs_tiles_unavailable_tint));
+                }
             case Tile.STATE_INACTIVE:
-                return Utils.getColorAttr(context, android.R.attr.textColorSecondary);
+                if (!enableQsTileTinting) {
+                    return Utils.getColorAttr(context, android.R.attr.textColorSecondary);
+                } else {
+                    return context.getColor(R.color.qs_tiles_inactive_tint);
+                }
             case Tile.STATE_ACTIVE:
-                return Utils.getColorAttr(context, android.R.attr.colorPrimary);
+                if (!enableQsTileTinting) {
+                    return Utils.getColorAttr(context, android.R.attr.colorPrimary);
+                } else {
+                    return context.getColor(R.color.qs_tiles_active_tint);
+                }
             default:
                 Log.e("QSTile", "Invalid state " + state);
                 return 0;

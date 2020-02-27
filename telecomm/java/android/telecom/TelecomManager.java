@@ -168,6 +168,17 @@ public class TelecomManager {
             "android.telecom.action.DEFAULT_DIALER_CHANGED";
 
     /**
+     *@hide Broadcast intent action indicating the call type(CS call or Non-CS call).
+     * The string extra {@link #EXTRA_CALL_TYPE_CS} will contain the
+     * boolean value true if call is CS call else false.
+     *
+     * @see #EXTRA_CALL_TYPE_CS
+     */
+    public static final String ACTION_CALL_TYPE =
+            "codeaurora.telecom.action.CALL_TYPE";
+
+
+    /**
      * Extra value used to provide the package name for {@link #ACTION_CHANGE_DEFAULT_DIALER}.
      */
     public static final String EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME =
@@ -314,6 +325,13 @@ public class TelecomManager {
      */
     public static final String EXTRA_CALL_TECHNOLOGY_TYPE =
             "android.telecom.extra.CALL_TECHNOLOGY_TYPE";
+
+    /**
+     *@hide  Extra value used to provide the call type for {@link #ACTION_CALL_TYPE}.
+     */
+    public static final String EXTRA_CALL_TYPE_CS =
+            "codeaurora.telecom.extra.CALL_TYPE_CS";
+
 
     /**
      * An optional {@link android.content.Intent#ACTION_CALL} intent extra denoting the
@@ -617,6 +635,18 @@ public class TelecomManager {
      */
     public static final String EXTRA_USE_ASSISTED_DIALING =
             "android.telecom.extra.USE_ASSISTED_DIALING";
+
+    /**
+     * Optional extra for {@link #placeCall(Uri, Bundle)} containing an integer that specifies
+     * the source where user initiated this call. This data is used in metrics.
+     * Valid source are:
+     * {@link ParcelableCallAnalytics#CALL_SOURCE_UNSPECIFIED},
+     * {@link ParcelableCallAnalytics#CALL_SOURCE_EMERGENCY_DIALPAD},
+     * {@link ParcelableCallAnalytics#CALL_SOURCE_EMERGENCY_SHORTCUT}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_CALL_SOURCE = "android.telecom.extra.CALL_SOURCE";
 
     /**
      * The following 4 constants define how properties such as phone numbers and names are
@@ -1305,6 +1335,9 @@ public class TelecomManager {
      * foreground call is ended.
      * <p>
      * Requires permission {@link android.Manifest.permission#ANSWER_PHONE_CALLS}.
+     * <p>
+     * Note: this method CANNOT be used to end ongoing emergency calls and will return {@code false}
+     * if an attempt is made to end an emergency call.
      *
      * @return {@code true} if there is a call which will be rejected or terminated, {@code false}
      * otherwise.

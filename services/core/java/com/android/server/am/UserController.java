@@ -479,7 +479,7 @@ class UserController implements Handler.Callback {
         // purposefully block sending BOOT_COMPLETED until after all
         // PRE_BOOT receivers are finished to avoid ANR'ing apps
         final UserInfo info = getUserInfo(userId);
-        if (!Objects.equals(info.lastLoggedInFingerprint, Build.DATE)) {
+        if (!Objects.equals(info.lastLoggedInFingerprint, Build.FINGERPRINT)) {
             // Suppress double notifications for managed profiles that
             // were unlocked automatically as part of their parent user
             // being unlocked.
@@ -845,10 +845,16 @@ class UserController implements Handler.Callback {
     }
 
     void scheduleStartProfiles() {
-        if (!mHandler.hasMessages(START_PROFILES_MSG)) {
-            mHandler.sendMessageDelayed(mHandler.obtainMessage(START_PROFILES_MSG),
-                    DateUtils.SECOND_IN_MILLIS);
-        }
+        // Parent user transition to RUNNING_UNLOCKING happens on FgThread, so it is busy, there is
+        // a chance the profile will reach RUNNING_LOCKED while parent is still locked, so no
+        // attempt will be made to unlock the profile. If we go via FgThread, this will be executed
+        // after the parent had chance to unlock fully.
+        FgThread.getHandler().post(() -> {
+            if (!mHandler.hasMessages(START_PROFILES_MSG)) {
+                mHandler.sendMessageDelayed(mHandler.obtainMessage(START_PROFILES_MSG),
+                        DateUtils.SECOND_IN_MILLIS);
+            }
+        });
     }
 
     void startProfiles() {

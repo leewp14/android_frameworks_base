@@ -391,6 +391,14 @@ public class LockPatternUtils {
         }
     }
 
+    public boolean shouldPassToSecurityView(int userId) {
+        return getBoolean(Settings.Secure.LOCK_PASS_TO_SECURITY_VIEW, false, userId);
+    }
+
+    public void setPassToSecurityView(boolean enabled, int userId) {
+        setBoolean(Settings.Secure.LOCK_PASS_TO_SECURITY_VIEW, enabled, userId);
+    }
+
     /**
      * Check to see if a pattern matches the saved pattern.
      * If pattern matches, return an opaque attestation that the challenge
@@ -402,7 +410,6 @@ public class LockPatternUtils {
      */
     public byte[] verifyPattern(List<LockPatternView.Cell> pattern, long challenge, int userId)
             throws RequestThrottledException {
-        throwIfCalledOnMainThread();
         return verifyCredential(patternToString(pattern, userId), CREDENTIAL_TYPE_PATTERN, challenge,
                 userId);
     }
@@ -427,7 +434,6 @@ public class LockPatternUtils {
     public boolean checkPattern(List<LockPatternView.Cell> pattern, int userId,
             @Nullable CheckCredentialProgressCallback progressCallback)
             throws RequestThrottledException {
-        throwIfCalledOnMainThread();
         return checkCredential(patternToString(pattern, userId), CREDENTIAL_TYPE_PATTERN, userId,
                 progressCallback);
     }
@@ -443,7 +449,6 @@ public class LockPatternUtils {
      */
     public byte[] verifyPassword(String password, long challenge, int userId)
             throws RequestThrottledException {
-        throwIfCalledOnMainThread();
         return verifyCredential(password, CREDENTIAL_TYPE_PASSWORD, challenge, userId);
     }
 
@@ -459,7 +464,6 @@ public class LockPatternUtils {
      */
     public byte[] verifyTiedProfileChallenge(String password, boolean isPattern, long challenge,
             int userId) throws RequestThrottledException {
-        throwIfCalledOnMainThread();
         try {
             VerifyCredentialResponse response =
                     getLockSettings().verifyTiedProfileChallenge(password,
@@ -497,7 +501,6 @@ public class LockPatternUtils {
     public boolean checkPassword(String password, int userId,
             @Nullable CheckCredentialProgressCallback progressCallback)
             throws RequestThrottledException {
-        throwIfCalledOnMainThread();
         return checkCredential(password, CREDENTIAL_TYPE_PASSWORD, userId, progressCallback);
     }
 
@@ -735,6 +738,17 @@ public class LockPatternUtils {
 
         reportPatternWasChosen(userId);
         onAfterChangingPassword(userId);
+    }
+
+    /**
+     * clears stored password.
+     */
+    public void sanitizePassword() {
+        try {
+            getLockSettings().sanitizePassword();
+        } catch (RemoteException re) {
+            Log.e(TAG, "Couldn't sanitize password" + re);
+        }
     }
 
     private void updateCryptoUserInfo(int userId) {
@@ -1381,8 +1395,7 @@ public class LockPatternUtils {
         return deadline;
     }
 
-    /** @hide */
-    protected boolean getBoolean(String secureSettingKey, boolean defaultValue, int userId) {
+    private boolean getBoolean(String secureSettingKey, boolean defaultValue, int userId) {
         try {
             return getLockSettings().getBoolean(secureSettingKey, defaultValue, userId);
         } catch (RemoteException re) {
@@ -1390,8 +1403,7 @@ public class LockPatternUtils {
         }
     }
 
-    /** @hide */
-    protected void setBoolean(String secureSettingKey, boolean enabled, int userId) {
+    private void setBoolean(String secureSettingKey, boolean enabled, int userId) {
         try {
             getLockSettings().setBoolean(secureSettingKey, enabled, userId);
         } catch (RemoteException re) {
@@ -1400,8 +1412,7 @@ public class LockPatternUtils {
         }
     }
 
-    /** @hide */
-    protected long getLong(String secureSettingKey, long defaultValue, int userHandle) {
+    private long getLong(String secureSettingKey, long defaultValue, int userHandle) {
         try {
             return getLockSettings().getLong(secureSettingKey, defaultValue, userHandle);
         } catch (RemoteException re) {
@@ -1409,8 +1420,7 @@ public class LockPatternUtils {
         }
     }
 
-    /** @hide */
-    protected void setLong(String secureSettingKey, long value, int userHandle) {
+    private void setLong(String secureSettingKey, long value, int userHandle) {
         try {
             getLockSettings().setLong(secureSettingKey, value, userHandle);
         } catch (RemoteException re) {
@@ -1419,8 +1429,7 @@ public class LockPatternUtils {
         }
     }
 
-    /** @hide */
-    protected String getString(String secureSettingKey, int userHandle) {
+    private String getString(String secureSettingKey, int userHandle) {
         try {
             return getLockSettings().getString(secureSettingKey, null, userHandle);
         } catch (RemoteException re) {
@@ -1428,8 +1437,7 @@ public class LockPatternUtils {
         }
     }
 
-    /** @hide */
-    protected void setString(String secureSettingKey, String value, int userHandle) {
+    private void setString(String secureSettingKey, String value, int userHandle) {
         try {
             getLockSettings().setString(secureSettingKey, value, userHandle);
         } catch (RemoteException re) {
@@ -1534,12 +1542,6 @@ public class LockPatternUtils {
 
     private boolean shouldEncryptWithCredentials(boolean defaultValue) {
         return isCredentialRequiredToDecrypt(defaultValue) && !isDoNotAskCredentialsOnBootSet();
-    }
-
-    private void throwIfCalledOnMainThread() {
-        if (Looper.getMainLooper().isCurrentThread()) {
-            throw new IllegalStateException("should not be called from the main thread.");
-        }
     }
 
     public void registerStrongAuthTracker(final StrongAuthTracker strongAuthTracker) {

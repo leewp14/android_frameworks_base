@@ -28,6 +28,7 @@ import android.net.ConnectivityManager;
 import android.net.wifi.WifiManager;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.text.method.SingleLineTransformationMethod;
 import android.util.AttributeSet;
@@ -43,11 +44,6 @@ import com.android.settingslib.WirelessUtils;
 import android.telephony.TelephonyManager;
 
 public class CarrierText extends TextView {
-    /** Do not show missing sim message. */
-    public static final int FLAG_HIDE_MISSING_SIM = 1 << 0;
-    /** Do not show airplane mode message. */
-    public static final int FLAG_HIDE_AIRPLANE_MODE = 1 << 1;
-
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
     private static final String TAG = "CarrierText";
 
@@ -55,17 +51,23 @@ public class CarrierText extends TextView {
 
     private final boolean mIsEmergencyCallCapable;
 
+    private boolean mTelephonyCapable;
+
+    private boolean mShowMissingSim;
+
+    private boolean mShowAirplaneMode;
+
     private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
 
     private WifiManager mWifiManager;
 
     private boolean[] mSimErrorState = new boolean[TelephonyManager.getDefault().getPhoneCount()];
 
-    private int mFlags;
-
-    private KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
+    private final KeyguardUpdateMonitorCallback mCallback = new KeyguardUpdateMonitorCallback() {
         @Override
         public void onRefreshCarrierInfo() {
+            if (DEBUG) Log.d(TAG, "onRefreshCarrierInfo(), mTelephonyCapable: "
+                    + Boolean.toString(mTelephonyCapable));
             updateCarrierText();
         }
 
@@ -77,9 +79,18 @@ public class CarrierText extends TextView {
             setSelected(true);
         };
 
+        @Override
+        public void onTelephonyCapable(boolean capable) {
+            if (DEBUG) Log.d(TAG, "onTelephonyCapable() mTelephonyCapable: "
+                    + Boolean.toString(capable));
+            mTelephonyCapable = capable;
+            updateCarrierText();
+        }
+
         public void onSimStateChanged(int subId, int slotId, IccCardConstants.State simState) {
             if (slotId < 0) {
-                Log.d(TAG, "onSimStateChanged() - slotId invalid: " + slotId);
+                Log.d(TAG, "onSimStateChanged() - slotId invalid: " + slotId
+                        + " mTelephonyCapable: " + Boolean.toString(mTelephonyCapable));
                 return;
             }
 
@@ -91,12 +102,8 @@ public class CarrierText extends TextView {
                 mSimErrorState[slotId] = false;
                 updateCarrierText();
             }
-        };
+        }
     };
-
-    public void setDisplayFlags(int flags) {
-        mFlags = flags;
-    }
 
     /**
      * The status of this lock screen. Primarily used for widgets on LockScreen.
@@ -110,7 +117,8 @@ public class CarrierText extends TextView {
         SimLocked, // SIM card is currently locked
         SimPermDisabled, // SIM card is permanently disabled due to PUK unlock failure
         SimNotReady, // SIM is not ready yet. May never be on devices w/o a SIM.
-        SimIoError; // SIM card is faulty
+        SimIoError, // SIM card is faulty
+        SimUnknown // SIM card is unknown
     }
 
     public CarrierText(Context context) {
@@ -126,6 +134,8 @@ public class CarrierText extends TextView {
                 attrs, R.styleable.CarrierText, 0, 0);
         try {
             useAllCaps = a.getBoolean(R.styleable.CarrierText_allCaps, false);
+            mShowAirplaneMode = a.getBoolean(R.styleable.CarrierText_showAirplaneMode, false);
+            mShowMissingSim = a.getBoolean(R.styleable.CarrierText_showMissingSim, false);
         } finally {
             a.recycle();
         }
@@ -167,14 +177,51 @@ public class CarrierText extends TextView {
         boolean allSimsMissing = true;
         boolean anySimReadyAndInService = false;
         CharSequence displayText = null;
+        boolean showRat = getContext().getResources().getBoolean(
+                com.android.internal.R.bool.config_display_rat);
 
         List<SubscriptionInfo> subs = mKeyguardUpdateMonitor.getSubscriptionInfo(false);
         final int N = subs.size();
         if (DEBUG) Log.d(TAG, "updateCarrierText(): " + N);
         for (int i = 0; i < N; i++) {
+            CharSequence networkClass = "";
             int subId = subs.get(i).getSubscriptionId();
             State simState = mKeyguardUpdateMonitor.getSimState(subId);
+            if (showRat) {
+                ServiceState ss = mKeyguardUpdateMonitor.mServiceStates.get(subId);
+                if (ss != null && (ss.getDataRegState() == ServiceState.STATE_IN_SERVICE
+                        || ss.getVoiceRegState() == ServiceState.STATE_IN_SERVICE)) {
+                    int networkType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+                    if (ss.getRilDataRadioTechnology() !=
+                            ServiceState.RIL_RADIO_TECHNOLOGY_UNKNOWN) {
+                        networkType = ss.getDataNetworkType();
+                    } else if (ss.getRilVoiceRadioTechnology() !=
+                                ServiceState.RIL_RADIO_TECHNOLOGY_UNKNOWN) {
+                        networkType = ss.getVoiceNetworkType();
+                    }
+                    networkClass = networkClassToString(TelephonyManager
+                            .getNetworkClass(networkType));
+                }
+            }
             CharSequence carrierName = subs.get(i).getCarrierName();
+            if (showRat && !TextUtils.isEmpty(carrierName)) {
+                String[] names = carrierName.toString().split(mSeparator.toString(), 2);
+                StringBuilder newCarrierName = new StringBuilder();
+                for (int j = 0; j < names.length; j++) {
+                    if (!TextUtils.isEmpty(names[j])) {
+                        if (!TextUtils.isEmpty(networkClass) && showRat) {
+                            names[j] = new StringBuilder().append(names[j]).append(" ")
+                                    .append(networkClass).toString();
+                        }
+                        if (j > 0 && names[j].equals(names[j-1])) {
+                            continue;
+                        }
+                        if (j > 0) newCarrierName.append(mSeparator);
+                        newCarrierName.append(names[j]);
+                    }
+                }
+                carrierName = newCarrierName.toString();
+            }
             CharSequence carrierTextForSimState = getCarrierTextForSimState(simState, carrierName);
             if (DEBUG) {
                 Log.d(TAG, "Handling (subId=" + subId + "): " + simState + " " + carrierName);
@@ -249,12 +296,12 @@ public class CarrierText extends TextView {
     }
 
     private String getMissingSimMessage() {
-        return (mFlags & FLAG_HIDE_MISSING_SIM) == 0
+        return mShowMissingSim && mTelephonyCapable
                 ? getContext().getString(R.string.keyguard_missing_sim_message_short) : "";
     }
 
     private String getAirplaneModeMessage() {
-        return (mFlags & FLAG_HIDE_AIRPLANE_MODE) == 0
+        return mShowAirplaneMode
                 ? getContext().getString(R.string.airplane_mode) : "";
     }
 
@@ -360,6 +407,9 @@ public class CarrierText extends TextView {
                         getContext().getText(R.string.keyguard_sim_error_message_short),
                         text);
                 break;
+            case SimUnknown:
+                carrierText = null;
+                break;
         }
 
         return carrierText;
@@ -408,11 +458,11 @@ public class CarrierText extends TextView {
             case PERM_DISABLED:
                 return StatusMode.SimPermDisabled;
             case UNKNOWN:
-                return StatusMode.SimMissing;
+                return StatusMode.SimUnknown;
             case CARD_IO_ERROR:
                 return StatusMode.SimIoError;
         }
-        return StatusMode.SimMissing;
+        return StatusMode.SimUnknown;
     }
 
     private static CharSequence concatenate(CharSequence plmn, CharSequence spn) {
@@ -478,5 +528,18 @@ public class CarrierText extends TextView {
 
             return source;
         }
+    }
+
+    private String networkClassToString (int networkClass) {
+        final int[] classIds =
+            {com.android.internal.R.string.config_rat_unknown, // TelephonyManager.NETWORK_CLASS_UNKNOWN
+            com.android.internal.R.string.config_rat_2g,
+            com.android.internal.R.string.config_rat_3g,
+            com.android.internal.R.string.config_rat_4g };
+        String classString = null;
+        if (networkClass < classIds.length) {
+            classString = getContext().getResources().getString(classIds[networkClass]);
+        }
+        return (classString == null) ? "" : classString;
     }
 }

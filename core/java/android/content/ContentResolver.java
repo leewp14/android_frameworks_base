@@ -77,6 +77,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>For more information about using a ContentResolver with content providers, read the
  * <a href="{@docRoot}guide/topics/providers/content-providers.html">Content Providers</a>
  * developer guide.</p>
+ * </div>
  */
 public abstract class ContentResolver {
     /**
@@ -707,6 +708,7 @@ public abstract class ContentResolver {
     public final @Nullable Cursor query(@RequiresPermission.Read @NonNull Uri uri,
             @Nullable String[] projection, @Nullable String selection,
             @Nullable String[] selectionArgs, @Nullable String sortOrder) {
+        android.util.SeempLog.record_uri(13, uri);
         return query(uri, projection, selection, selectionArgs, sortOrder, null);
     }
 
@@ -782,6 +784,7 @@ public abstract class ContentResolver {
     public final @Nullable Cursor query(final @RequiresPermission.Read @NonNull Uri uri,
             @Nullable String[] projection, @Nullable Bundle queryArgs,
             @Nullable CancellationSignal cancellationSignal) {
+        android.util.SeempLog.record_uri(13, uri);
         Preconditions.checkNotNull(uri, "uri");
         IContentProvider unstableProvider = acquireUnstableProvider(uri);
         if (unstableProvider == null) {
@@ -1577,6 +1580,7 @@ public abstract class ContentResolver {
      */
     public final @Nullable Uri insert(@RequiresPermission.Write @NonNull Uri url,
                 @Nullable ContentValues values) {
+        android.util.SeempLog.record_uri(37, url);
         Preconditions.checkNotNull(url, "url");
         IContentProvider provider = acquireProvider(url);
         if (provider == null) {
@@ -1845,7 +1849,7 @@ public abstract class ContentResolver {
      * that services the content at uri, starting the provider if necessary. Returns
      * null if there is no provider associated wih the uri. The caller must indicate that they are
      * done with the provider by calling {@link ContentProviderClient#release} which will allow
-     * the system to release the provider it it determines that there is no other reason for
+     * the system to release the provider if it determines that there is no other reason for
      * keeping it active.
      * @param uri specifies which provider should be acquired
      * @return a {@link ContentProviderClient} that is associated with the {@link ContentProvider}
@@ -1865,7 +1869,7 @@ public abstract class ContentResolver {
      * with the authority of name, starting the provider if necessary. Returns
      * null if there is no provider associated wih the uri. The caller must indicate that they are
      * done with the provider by calling {@link ContentProviderClient#release} which will allow
-     * the system to release the provider it it determines that there is no other reason for
+     * the system to release the provider if it determines that there is no other reason for
      * keeping it active.
      * @param name specifies which provider should be acquired
      * @return a {@link ContentProviderClient} that is associated with the {@link ContentProvider}

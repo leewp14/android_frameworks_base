@@ -112,4 +112,6 @@ public interface NotificationPresenter extends NotificationData.Environment,
      * Called when the row states are updated by NotificationViewHierarchyManager.
      */
     void onUpdateRowStates();
+
+    void setAmbientMusicInfo(String notificationText, boolean nowPlaying);
 }
